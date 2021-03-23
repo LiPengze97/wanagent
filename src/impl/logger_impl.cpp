@@ -1,5 +1,5 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
-#include <wan_agent/logger.hpp>
+#include <logger.hpp>
 
 namespace wan_agent {
 #ifndef NDEBUG

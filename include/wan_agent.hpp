@@ -17,8 +17,8 @@
 #include <nlohmann/json.hpp>
 #include <thread>
 #include <utility>
-#include <wan_agent/wan_agent_type_definitions.hpp>
-#include <wan_agent/wan_agent_object.hpp>
+#include <wan_agent_type_definitions.hpp>
+#include <wan_agent_object.hpp>
 // #include <wan_agent/wan_agent_utils.hpp>
 #include "pre_driver.hpp"
 #include "predicate_generator.hpp"

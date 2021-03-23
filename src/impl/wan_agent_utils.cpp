@@ -3,7 +3,7 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <wan_agent/wan_agent_utils.hpp>
+#include <wan_agent_utils.hpp>
 
 int add_epoll(int epoll_fd, int events, int fd) {
     struct epoll_event ev;

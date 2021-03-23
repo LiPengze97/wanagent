@@ -1,4 +1,4 @@
-#include <wan_agent/wan_agent_object.hpp>
+#include <wan_agent_object.hpp>
 
 namespace wan_agent {
 

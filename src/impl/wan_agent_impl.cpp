@@ -15,9 +15,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
-#include <wan_agent/logger.hpp>
+#include <logger.hpp>
 #include <wan_agent.hpp>
-#include <wan_agent/wan_agent_utils.hpp>
+#include <wan_agent_utils.hpp>
 
 inline uint64_t get_time_us() {
     struct timespec ts;
