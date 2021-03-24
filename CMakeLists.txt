@@ -85,6 +85,8 @@ target_link_libraries(wan_agent
     predicate_generator
     )
 
+add_subdirectory(src/test)
+
 install(TARGETS wan_agent
     EXPORT wan_agentTargets
     LIBRARY DESTINATION lib

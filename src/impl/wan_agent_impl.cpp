@@ -97,163 +97,181 @@ WanAgent::WanAgent(const nlohmann::json& wan_group_config, std::string log_level
     Logger::set_log_level(log_level);
 }
 
-// RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
-//                                            int num_senders,
-//                                            unsigned short local_port,
-//                                            const size_t max_payload_size,
-//                                            const RemoteMessageCallback& rmc,
-//                                            WanAgent* hugger)
-//         : local_site_id(local_site_id),
-//           num_senders(num_senders),
-//           max_payload_size(max_payload_size),
-//           rmc(rmc),
-//           hugger(hugger) {
-//     std::cout << "1: " << local_site_id << std::endl;
-//     std::cout << "2" << std::endl;
-//     sockaddr_in serv_addr;
-//     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-//     if(fd < 0)
-//         throw std::runtime_error("RemoteMessageService failed to create socket.");
+RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
+                                           int num_senders,
+                                           unsigned short local_port,
+                                           const size_t max_payload_size,
+                                           const RemoteMessageCallback& rmc,
+                                           WanAgent* hugger)
+        : local_site_id(local_site_id),
+          num_senders(num_senders),
+          max_payload_size(max_payload_size),
+          rmc(rmc),
+          hugger(hugger) {
+    std::cout << "1: " << local_site_id << std::endl;
+    std::cout << "2" << std::endl;
+    sockaddr_in serv_addr;
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if(fd < 0)
+        throw std::runtime_error("RemoteMessageService failed to create socket.");
 
-//     int reuse_addr = 1;
-//     if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse_addr,
-//                   sizeof(reuse_addr))
-//        < 0) {
-//         fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
-//     }
+    int reuse_addr = 1;
+    if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse_addr,
+                  sizeof(reuse_addr))
+       < 0) {
+        fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
+    }
 
-//     memset(&serv_addr, 0, sizeof(serv_addr));
-//     serv_addr.sin_family = AF_INET;
-//     serv_addr.sin_addr.s_addr = INADDR_ANY;
-//     serv_addr.sin_port = htons(local_port);
-//     if(bind(fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-//         fprintf(stderr, "ERROR on binding to socket: %s\n", strerror(errno));
-//         throw std::runtime_error("RemoteMessageService failed to bind socket.");
-//     }
-//     listen(fd, 5);
-//     server_socket = fd;
-//     std::cout << "RemoteMessageService listening on " << local_port << std::endl;
-//     // dbg_default_info("RemoteMessageService listening on {} ...", local_port);
-// };
+    int flag = 1;
+    int ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
 
-// void RemoteMessageService::establish_connections() {
-//     // TODO: maybe support dynamic join later, i.e. having a infinite loop always listening for join requests?
-//     while(worker_threads.size() < num_senders) {
-//         struct sockaddr_storage client_addr_info;
-//         socklen_t len = sizeof client_addr_info;
+    if(ret == -1) {
+        fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
+        exit(-1);
+    }
 
-//         int connected_sock_fd = ::accept(server_socket, (struct sockaddr*)&client_addr_info, &len);
-//         worker_threads.emplace_back(std::thread(&RemoteMessageService::epoll_worker, this, connected_sock_fd));
-//     }
-// }
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = INADDR_ANY;
+    serv_addr.sin_port = htons(local_port);
+    if(bind(fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        fprintf(stderr, "ERROR on binding to socket: %s\n", strerror(errno));
+        throw std::runtime_error("RemoteMessageService failed to bind socket.");
+    }
+    listen(fd, 5);
+    server_socket = fd;
+    std::cout << "RemoteMessageService listening on " << local_port << std::endl;
+    // dbg_default_info("RemoteMessageService listening on {} ...", local_port);
+};
 
-// void RemoteMessageService::worker(int connected_sock_fd) {
-//     RequestHeader header;
-//     bool success;
-//     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
-//     std::cout << "worker start" << std::endl;
-//     while(1) {
-//         if(connected_sock_fd < 0)
-//             throw std::runtime_error("connected_sock_fd closed!");
+void RemoteMessageService::establish_connections() {
+    // TODO: maybe support dynamic join later, i.e. having a infinite loop always listening for join requests?
+    auto num_fd = (num_senders << 1);
+    while(worker_threads.size() < num_fd) {
+        struct sockaddr_storage client_addr_info;
+        socklen_t len = sizeof client_addr_info;
 
-//         success = sock_read(connected_sock_fd, header);
-//         if(!success)
-//             throw std::runtime_error("Failed to read request header");
+        int connected_sock_fd = ::accept(server_socket, (struct sockaddr*)&client_addr_info, &len);
+        worker_threads.emplace_back(std::thread(&RemoteMessageService::epoll_worker, this, connected_sock_fd));
+    }
+}
 
-//         success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
-//         if(!success)
-//             throw std::runtime_error("Failed to read message");
+void RemoteMessageService::worker(int connected_sock_fd) {
+    RequestHeader header;
+    bool success;
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
+    std::cout << "worker start" << std::endl;
+    while(1) {
+        if(connected_sock_fd < 0)
+            throw std::runtime_error("connected_sock_fd closed!");
 
-//         // dbg_default_info("received msg {} from site {}", header.seq, header.site_id);
+        success = sock_read(connected_sock_fd, header);
+        if(!success)
+            throw std::runtime_error("Failed to read request header");
+        if (header.payload_size) {
+            success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
+            if(!success)
+                throw std::runtime_error("Failed to receive object");
+        }
+        Blob obj = std::move(rmc(header, buffer.get()));
+        success = sock_write(connected_sock_fd, Response{obj.size, header.version, local_site_id});
+        if(!success)
+            throw std::runtime_error("Failed to send ACK message");
+        if (header.requestType == 0) { // read
+            success = sock_write(connected_sock_fd, obj.bytes, obj.size);
+            if (!success)
+                throw std::runtime_error("Failed to send all the bytes");
+        }
+    }
+}
 
-//         rmc(header.site_id, buffer.get(), header.payload_size);
-//         success = sock_write(connected_sock_fd, Response{header.seq, local_site_id});
-//         if(!success)
-//             throw std::runtime_error("Failed to send ACK message");
-//     }
-// }
+void RemoteMessageService::epoll_worker(int connected_sock_fd) {
+    RequestHeader header;
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
+    bool success;
+    std::cout << "epoll_worker start\n";
 
-// void RemoteMessageService::epoll_worker(int connected_sock_fd) {
-//     RequestHeader header;
-//     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
-//     bool success;
-//     std::cout << "epoll_worker start\n";
+    int epoll_fd_recv_msg = epoll_create1(0);
+    if(epoll_fd_recv_msg == -1)
+        throw std::runtime_error("failed to create epoll fd");
+    add_epoll(epoll_fd_recv_msg, EPOLLIN, connected_sock_fd);
 
-//     int epoll_fd_recv_msg = epoll_create1(0);
-//     if(epoll_fd_recv_msg == -1)
-//         throw std::runtime_error("failed to create epoll fd");
-//     add_epoll(epoll_fd_recv_msg, EPOLLIN, connected_sock_fd);
+    std::cout << "The connected_sock_fd is " << connected_sock_fd << std::endl;
 
-//     std::cout << "The connected_sock_fd is " << connected_sock_fd << std::endl;
+    struct epoll_event events[EPOLL_MAXEVENTS];
+    while(!hugger->get_is_shutdown()) {
+        int n = epoll_wait(epoll_fd_recv_msg, events, EPOLL_MAXEVENTS, -1);
+        for(int i = 0; i < n; i++) {
+            if(events[i].events & EPOLLIN) {
+                std::cout << "get event from fd " << events[i].data.fd << std::endl;
+                success = sock_read(connected_sock_fd, header);
+                if(!success) {
+                    std::cout << "Failed to read request header, "
+                              << "receive " << n << " messages from sender.\n";
+                    throw std::runtime_error("Failed to read request header");
+                }
+                if (header.payload_size) {
+                    success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
+                    if(!success)
+                        throw std::runtime_error("Failed to receive object");
+                }
+                Blob obj = std::move(rmc(header, buffer.get()));
+                success = sock_write(connected_sock_fd, Response{obj.size, header.version, local_site_id});
+                std::cout << "ACK sent with size = " << obj.size << ' ' << " obj = " << obj.bytes << std::endl;
+                if(!success)
+                    throw std::runtime_error("Failed to send ACK message");
+                if (header.requestType == 0) { // read request
+                    success &= sock_write(connected_sock_fd, obj.bytes, obj.size);
+                    if (!success)
+                        throw std::runtime_error("Failed to send all the bytes");
+                }
+            }
+        }
+    }
+}
 
-//     struct epoll_event events[EPOLL_MAXEVENTS];
-//     while(!hugger->get_is_shutdown()) {
-//         int n = epoll_wait(epoll_fd_recv_msg, events, EPOLL_MAXEVENTS, -1);
-//         for(int i = 0; i < n; i++) {
-//             if(events[i].events & EPOLLIN) {
-//                 std::cout << "get event from fd " << events[i].data.fd << std::endl;
-//                 // get msg from sender
-//                 success = sock_read(connected_sock_fd, header);
-//                 if(!success) {
-//                     std::cout << "Failed to read request header, "
-//                               << "receive " << n << " messages from sender.\n";
-//                     throw std::runtime_error("Failed to read request header");
-//                 }
-//                 success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
-//                 if(!success)
-//                     throw std::runtime_error("Failed to read message");
+WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
+                               const RemoteMessageCallback& rmc, std::string log_level)
+        : WanAgent(wan_group_config, log_level),
+          remote_message_callback(rmc),
+          remote_message_service(
+                  local_site_id,
+                  num_senders,
+                  local_port,
+                  wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
+                  rmc,
+                  this) {
+    std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
+    rms_establish_thread.detach();
 
-//                 // dbg_default_info("received msg {} from site {}", header.seq, header.site_id);
+    // deprecated
+    // // TODO: for now, all sites must start in 3 seconds; to be replaced with retry mechanism when establishing sockets
+    // sleep(3);
 
-//                 rmc(header.site_id, buffer.get(), header.payload_size);
-//                 success = sock_write(connected_sock_fd, Response{header.seq, local_site_id});
-//                 if(!success)
-//                     throw std::runtime_error("Failed to send ACK message");
-//             }
-//         }
-//     }
-// }
+    std::cout << "Press ENTER to kill." << std::endl;
+    std::cin.get();
+    shutdown_and_wait();
+}
 
-// WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
-//                                const RemoteMessageCallback& rmc, std::string log_level)
-//         : WanAgent(wan_group_config, log_level),
-//           remote_message_callback(rmc),
-//           remote_message_service(
-//                   local_site_id,
-//                   num_senders,
-//                   local_port,
-//                   wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
-//                   rmc,
-//                   this) {
-//     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
-//     rms_establish_thread.detach();
-
-//     // deprecated
-//     // // TODO: for now, all sites must start in 3 seconds; to be replaced with retry mechanism when establishing sockets
-//     // sleep(3);
-
-//     std::cout << "Press ENTER to kill." << std::endl;
-//     std::cin.get();
-//     shutdown_and_wait();
-// }
-
-// void WanAgentServer::shutdown_and_wait() {
-//     log_enter_func();
-//     is_shutdown.store(true);
-//     log_exit_func();
-// }
+void WanAgentServer::shutdown_and_wait() {
+    log_enter_func();
+    is_shutdown.store(true);
+    log_exit_func();
+}
 
 MessageSender::MessageSender(const site_id_t& local_site_id,
                              const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                              const size_t& n_slots, const size_t& max_payload_size,
                              std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
-                             const ReportACKFunc& report_new_ack)
+                             const ReportACKFunc& report_new_ack,
+                             const ReadRecvCallback& _RRC)
         : local_site_id(local_site_id),
           n_slots(n_slots),  // TODO: useless after using linked list
           last_all_sent_seqno(static_cast<uint64_t>(-1)),
           R_last_all_sent_seqno(static_cast<uint64_t>(-1)),
           message_counters(message_counters),
           report_new_ack(report_new_ack),
+          RRC(_RRC),
           thread_shutdown(false) {
     log_enter_func();
     // for(unsigned int i = 0; i < n_slots; i++) {
@@ -318,29 +336,30 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
     }
 
     nServer = message_counters.size();
+    std::cout << "nServer = " << nServer << std::endl;
 
     log_exit_func();
 }
 
-void MessageSender::check_read_tmp_store(const uint64_t seq, const persistent::version_t version, Blob&& obj) {
-    std::pair<persistent::version_t, Blob>& obj_in_store = read_object_store[seq];
-    if (obj_in_store.second.size == 0) {
-        obj_in_store.first = version;
-        obj_in_store.second = obj;
-    } else if (version != obj_in_store.first) {
-        throw std::runtime_error("Something wrong with versions");
-    }
-    read_recv_cnt[seq]++;
-    if (read_recv_cnt[seq] == nServer) {
-        read_promise_lock.lock();
-        auto iter = read_promise_store.find(seq);
-        iter->second.set_value(std::move(read_object_store[seq]));
-        read_object_store.erase(read_object_store.find(seq));
-        read_recv_cnt.erase(read_recv_cnt.find(seq));
-        read_promise_store.erase(iter);
-        read_promise_lock.unlock();
-    }
-}
+// void MessageSender::check_read_tmp_store(const uint64_t seq, const persistent::version_t version, Blob&& obj) {
+//     std::pair<persistent::version_t, Blob>& obj_in_store = read_object_store[seq];
+//     if (obj_in_store.second.size == 0) {
+//         obj_in_store.first = version;
+//         obj_in_store.second = obj;
+//     } else if (version != obj_in_store.first) {
+//         throw std::runtime_error("Something wrong with versions");
+//     }
+//     read_recv_cnt[seq]++;
+//     if (read_recv_cnt[seq] == nServer) {
+//         read_promise_lock.lock();
+//         auto iter = read_promise_store.find(seq);
+//         iter->second.set_value(std::move(read_object_store[seq]));
+//         read_object_store.erase(read_object_store.find(seq));
+//         read_recv_cnt.erase(read_recv_cnt.find(seq));
+//         read_promise_store.erase(iter);
+//         read_promise_lock.unlock();
+//     }
+// }
 
 void MessageSender::recv_ack_loop() {
     log_enter_func();
@@ -351,7 +370,6 @@ void MessageSender::recv_ack_loop() {
         int n = epoll_wait(epoll_fd_recv_ack, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLIN) {
-                std::cout << "recv_ack started to work" << std::endl;
                 // received ACK
                 Response res;
                 auto success = sock_read(events[i].data.fd, res);
@@ -389,15 +407,13 @@ void MessageSender::recv_read_ack_loop() {
                 }
                 std::cout << "received read ACK from " << res.site_id << " for msg " << res.version << std::endl;
                 auto obj_size = res.payload_size;
-                std::cout << "obj_size = " << obj_size << std::endl;
                 if (obj_size) {
-                    char* obj_buf = (char*)malloc(obj_size);
-                    std::cout << "receiving object" << std::endl;
-                    success = sock_read(events[i].data.fd, obj_buf, obj_size);
+                    Blob cur_obj = std::move(Blob(nullptr, obj_size));
+                    success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
                     if (!success)
                         throw std::runtime_error("failed receiving object for read request");
-                    std::cout << "version = " << res.version << ' ' << "obj_size = " << obj_size << std::endl;
-                    check_read_tmp_store(res.version, res.version, std::move(Blob(std::move(obj_buf), obj_size)));
+                    // check_read_tmp_store(res.version, res.version, std::move(Blob(std::move(obj_buf), obj_size)));
+                    RRC(res.version, res.site_id, std::move(cur_obj));
                 }
             }
         }
@@ -551,7 +567,7 @@ void MessageSender::wait_stability_frontier_loop(int sf) {
     stability_frontier_set_cv.notify_one();
 }
 
-void MessageSender::enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t& version) {
+uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version=(uint64_t)-1) {
         // std::unique_lock<std::mutex> lock(mutex);
     size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
@@ -564,15 +580,27 @@ void MessageSender::enqueue(const uint32_t requestType, const char* payload, con
         memcpy(tmp->message_body, payload, payload_size);
     }
     tmp->message_type = requestType;
-    tmp->message_version = version;
+
+    uint64_t ret = 0;
+    if (version == (uint64_t)-1) {
+        tmp->message_version = (++max_version);
+        ret = max_version;
+    } else {
+        tmp->message_version = version;
+        ret = version;
+        max_version = std::max(version, max_version);
+    }
+
+    std::cout << "in enqueue, version = " << version << " max version = " << max_version << std::endl;
 
     buffer_list.push_back(*tmp);
     enter_queue_time_keeper[msg_idx++] = get_time_us();
     size_mutex.unlock();
     not_empty.notify_one();
+    return ret;
 }
 
-read_future_t MessageSender::read_enqueue(const uint64_t& version) {
+void MessageSender::read_enqueue(const uint64_t& version) {
     read_size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
     tmp->message_body = nullptr;
@@ -580,18 +608,10 @@ read_future_t MessageSender::read_enqueue(const uint64_t& version) {
     tmp->message_type = 0;
     tmp->message_version = version;
 
-    //set the read promise store before push_back
-    read_promise_lock.lock();
-    read_promise_t new_promise;
-    read_future_t ret_future = new_promise.get_future();
-    read_promise_store.emplace(version, std::move(new_promise));
-    read_promise_lock.unlock();
-
     read_buffer_list.push_back(*tmp);
     // enter_queue_time_keeper[msg_idx++] = get_time_us();
     read_size_mutex.unlock();
     read_not_empty.notify_one();
-    return std::move(ret_future);
 }
 
 void MessageSender::send_msg_loop() {
@@ -649,7 +669,7 @@ void MessageSender::send_msg_loop() {
         // log_debug("smallest seqno in last_sent_seqno is {}", it->second);
         // dequeue from ring buffer
         // || min_element == 0 will skip the comparison with static_cast<uint64_t>(-1)
-        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second == 0)) {
+        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second >= 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
@@ -713,8 +733,11 @@ void MessageSender::read_msg_loop() {
 }
 
 WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
-                               const PredicateLambda& pl, std::string log_level)
+                               const PredicateLambda& pl, 
+                               const ReadRecvCallback& _RRC,
+                               std::string log_level)
         : WanAgent(wan_group_config, log_level),
+          RRC(_RRC),
           has_new_ack(false),
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
@@ -737,7 +760,8 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             wan_group_config[WAN_AGENT_WINDOW_SIZE],  // TODO: useless after using linked list
             wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
             message_counters,
-            [this]() {});
+            [this]() {},
+            _RRC);
     // [this]() { this->report_new_ack(); });
     generate_predicate();
     recv_ack_thread = std::thread(&MessageSender::recv_ack_loop, message_sender.get());
