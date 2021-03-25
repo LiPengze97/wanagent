@@ -75,6 +75,7 @@ using read_promise_t = std::promise<std::pair<persistent::version_t, Blob>>;
 struct RequestHeader {
     uint32_t requestType;
     uint64_t version;
+    uint64_t seq;
     uint32_t site_id;
     size_t payload_size;
 };
@@ -82,6 +83,7 @@ struct RequestHeader {
 struct Response {
     size_t payload_size;
     uint64_t version;
+    uint64_t seq; //this is for read request
     uint32_t site_id;
 };
 
@@ -235,9 +237,16 @@ struct LinkedBufferNode {
     char* message_body;
     uint32_t message_type;
     uint64_t message_version;
+    ReadRecvCallback RRC;
     LinkedBufferNode* next;
 
     LinkedBufferNode() {}
+    void Destruct() {
+        if (message_body != nullptr) {
+            delete[] message_body;
+            message_body = nullptr;
+        }
+    }
 };
 
 // the Client worker
@@ -290,7 +299,7 @@ private:
     int nServer;
     uint64_t max_version = 0;
 
-    const ReadRecvCallback RRC;
+    std::map<uint64_t, ReadRecvCallback> read_callback_store;
 
 public:
     std::vector<pre_operation> operations;
@@ -337,8 +346,7 @@ public:
                   const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                   const size_t& n_slots, const size_t& max_payload_size,
                   std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
-                  const ReportACKFunc& report_new_ack,
-                  const ReadRecvCallback& _RRC);
+                  const ReportACKFunc& report_new_ack);
     inline void update_max_version(const uint64_t& version) {
         max_version = std::max(version, max_version);
     }
@@ -346,12 +354,13 @@ public:
     void recv_read_ack_loop();
     // void check_read_tmp_store(const uint64_t seq, const persistent::version_t version, Blob&& obj);
     uint64_t enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version);
-    void read_enqueue(const uint64_t& version);
+    void read_enqueue(const uint64_t& version, const ReadRecvCallback RRC);
     void send_msg_loop();
     void read_msg_loop();
     void predicate_calculation();
     void wait_stability_frontier_loop(int sf);
     void sf_time_checker_loop();
+    void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
     // void set_stability_frontier(int sf);
     void shutdown() {
         thread_shutdown.store(true);
@@ -387,11 +396,9 @@ private:
     predicate_fn_type predicate;
     std::map<std::string, predicate_fn_type> predicate_map;
 
-    const ReadRecvCallback& RRC;
-
 public:
     WanAgentSender(const nlohmann::json& wan_group_config,
-                   const PredicateLambda& pl, const ReadRecvCallback& _RRC, std::string log_level = "trace");
+                   const PredicateLambda& pl, std::string log_level = "trace");
     ~WanAgentSender() {}
 
     // bool is_ready()
@@ -420,8 +427,8 @@ public:
     virtual uint64_t send_write_req(const char* payload, const size_t payload_size, const uint64_t version=(uint64_t)-1) {
         return this->message_sender->enqueue(1, payload, payload_size, version);
     }
-    virtual void send_read_req(const uint64_t& version) {
-        this->message_sender->read_enqueue(version);
+    virtual void send_read_req(const uint64_t& version, const ReadRecvCallback RRC) {
+        this->message_sender->read_enqueue(version, RRC);
     }
 
     void submit_predicate(std::string key, std::string predicate_str, bool inplace);

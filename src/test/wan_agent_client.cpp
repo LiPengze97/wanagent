@@ -132,14 +132,17 @@ int main(int argc, char** argv) {
         }
     };
 
-    wan_agent::ReadRecvCallback RRC = [](const uint64_t version, const site_id_t site, Blob&& obj) {
-        std::cout << "Receive Object of version = " << version << " from site = " << site << std::endl;
-        std::cout << "Object size = " << obj.size << ' ' << " Object = " << obj.bytes << std::endl;
+    wan_agent::ReadRecvCallback RRC_1 = [](const uint64_t version, const site_id_t site, Blob&& obj) {
+        std::cout << "1111 Receive Object of version = " << version << " obj = " << obj.bytes << " from site = " << site << std::endl;
     };
 
-    wan_agent::WanAgentSender wan_agent_sender(conf, pl, RRC);
+    wan_agent::ReadRecvCallback RRC_2 = [](const uint64_t version, const site_id_t site, Blob&& obj) {
+        std::cout << "2222 Receive Object of version = " << version << " obj = " << obj.bytes << " from site = " << site << std::endl;
+    };
 
-    std::cout << "Press ENTER to send a message." << std::endl;
+    wan_agent::WanAgentSender wan_agent_sender(conf, pl);
+
+    std::cerr << "Press ENTER to send a message." << std::endl;
     std::cin.get();
 
     // prepare the sender buffer
@@ -151,34 +154,33 @@ int main(int argc, char** argv) {
         payload[i] = '0' + (i % 10);
     }
 
-    std::cout << "payload size is " << strlen(payload) << std::endl;
+    std::cerr << "payload size is " << strlen(payload) << std::endl;
     // send ...
     std::vector<uint64_t> valid_version;
 
     for(uint64_t seq = 0; seq < number_of_messages; seq++) {
-        std::cout << "seq = " << seq << std::endl;
+        std::cerr << "seq = " << seq << std::endl;
         time_keeper[seq * 4] = now_us();
         int t = (rand()&1);
         if (t || !valid_version.size()) {
             auto cur_version = wan_agent_sender.send_write_req(payload, message_size);
-            std::cout << "cur_version = " << cur_version << std::endl;
             valid_version.push_back(cur_version);
             ++number_of_writes;
         }
         else {
             int sz = valid_version.size();
-            wan_agent_sender.send_read_req(valid_version[Rand(0, sz - 1)]);
+            wan_agent_sender.send_read_req(valid_version[Rand(0, sz - 1)], (seq & 1) ? RRC_1 : RRC_2);
         }
         //            std::cout << "send a message with size = " << message_size << std::endl;
         while(now_us() < (time_keeper[seq * 4] + send_interval_us)) {
             std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
         }
     }
-    std::cout << "Done send messages, will not wait for reports." << std::endl;
+    std::cerr << "Done send messages, will not wait for reports." << std::endl;
     // wait till end
-    std::cout << "Send finished." << std::endl;
+    std::cerr << "Send finished." << std::endl;
 
-    std::cout << "Press ENTER to kill." << std::endl;
+    std::cerr << "Press ENTER to kill." << std::endl;
     std::cin.get();
     wan_agent_sender.shutdown_and_wait();
 

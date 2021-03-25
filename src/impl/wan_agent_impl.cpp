@@ -174,7 +174,7 @@ void RemoteMessageService::worker(int connected_sock_fd) {
                 throw std::runtime_error("Failed to receive object");
         }
         Blob obj = std::move(rmc(header, buffer.get()));
-        success = sock_write(connected_sock_fd, Response{obj.size, header.version, local_site_id});
+        success = sock_write(connected_sock_fd, Response{obj.size, header.version, header.seq, local_site_id});
         if(!success)
             throw std::runtime_error("Failed to send ACK message");
         if (header.requestType == 0) { // read
@@ -216,8 +216,8 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                         throw std::runtime_error("Failed to receive object");
                 }
                 Blob obj = std::move(rmc(header, buffer.get()));
-                success = sock_write(connected_sock_fd, Response{obj.size, header.version, local_site_id});
-                std::cout << "ACK sent with size = " << obj.size << ' ' << " obj = " << obj.bytes << std::endl;
+                success = sock_write(connected_sock_fd, Response{obj.size, header.version, header.seq, local_site_id});
+                std::cout << "ACK sent of request = " << header.seq << " which is a " << (header.requestType ? "read":"write") << " request" << std::endl;
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
                 if (header.requestType == 0) { // read request
@@ -263,15 +263,13 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
                              const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                              const size_t& n_slots, const size_t& max_payload_size,
                              std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
-                             const ReportACKFunc& report_new_ack,
-                             const ReadRecvCallback& _RRC)
+                             const ReportACKFunc& report_new_ack)
         : local_site_id(local_site_id),
           n_slots(n_slots),  // TODO: useless after using linked list
           last_all_sent_seqno(static_cast<uint64_t>(-1)),
           R_last_all_sent_seqno(static_cast<uint64_t>(-1)),
           message_counters(message_counters),
           report_new_ack(report_new_ack),
-          RRC(_RRC),
           thread_shutdown(false) {
     log_enter_func();
     // for(unsigned int i = 0; i < n_slots; i++) {
@@ -341,25 +339,17 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
     log_exit_func();
 }
 
-// void MessageSender::check_read_tmp_store(const uint64_t seq, const persistent::version_t version, Blob&& obj) {
-//     std::pair<persistent::version_t, Blob>& obj_in_store = read_object_store[seq];
-//     if (obj_in_store.second.size == 0) {
-//         obj_in_store.first = version;
-//         obj_in_store.second = obj;
-//     } else if (version != obj_in_store.first) {
-//         throw std::runtime_error("Something wrong with versions");
-//     }
-//     read_recv_cnt[seq]++;
-//     if (read_recv_cnt[seq] == nServer) {
-//         read_promise_lock.lock();
-//         auto iter = read_promise_store.find(seq);
-//         iter->second.set_value(std::move(read_object_store[seq]));
-//         read_object_store.erase(read_object_store.find(seq));
-//         read_recv_cnt.erase(read_recv_cnt.find(seq));
-//         read_promise_store.erase(iter);
-//         read_promise_lock.unlock();
-//     }
-// }
+void MessageSender::trigger_read_callback(const uint64_t seq, 
+                                          const uint64_t version, 
+                                          const site_id_t site, 
+                                          Blob&& obj) {
+    read_recv_cnt[seq]++;
+    read_callback_store[seq](version, site, std::move(obj));
+    if (read_recv_cnt[seq] == nServer) {
+        read_recv_cnt.erase(read_recv_cnt.find(seq));
+        read_callback_store.erase(read_callback_store.find(seq));
+    }
+}
 
 void MessageSender::recv_ack_loop() {
     log_enter_func();
@@ -405,7 +395,7 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received read ACK from " << res.site_id << " for msg " << res.version << std::endl;
+                std::cout << "received read ACK from " << res.site_id << " for msg " << res.seq << std::endl;
                 auto obj_size = res.payload_size;
                 if (obj_size) {
                     Blob cur_obj = std::move(Blob(nullptr, obj_size));
@@ -413,7 +403,7 @@ void MessageSender::recv_read_ack_loop() {
                     if (!success)
                         throw std::runtime_error("failed receiving object for read request");
                     // check_read_tmp_store(res.version, res.version, std::move(Blob(std::move(obj_buf), obj_size)));
-                    RRC(res.version, res.site_id, std::move(cur_obj));
+                    trigger_read_callback(res.seq, res.version, res.site_id, std::move(cur_obj));
                 }
             }
         }
@@ -580,6 +570,7 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
         memcpy(tmp->message_body, payload, payload_size);
     }
     tmp->message_type = requestType;
+    tmp->RRC = nullptr;
 
     uint64_t ret = 0;
     if (version == (uint64_t)-1) {
@@ -590,28 +581,29 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
         ret = version;
         max_version = std::max(version, max_version);
     }
-
-    std::cout << "in enqueue, version = " << version << " max version = " << max_version << std::endl;
-
-    buffer_list.push_back(*tmp);
+    
+    buffer_list.push_back(std::move(*tmp));
+    delete tmp;
     enter_queue_time_keeper[msg_idx++] = get_time_us();
     size_mutex.unlock();
     not_empty.notify_one();
     return ret;
 }
 
-void MessageSender::read_enqueue(const uint64_t& version) {
+void MessageSender::read_enqueue(const uint64_t& version, const ReadRecvCallback RRC) {
     read_size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
     tmp->message_body = nullptr;
     tmp->message_size = 0;
     tmp->message_type = 0;
     tmp->message_version = version;
+    tmp->RRC = RRC;
 
-    read_buffer_list.push_back(*tmp);
+    read_buffer_list.push_back(std::move(*tmp));
     // enter_queue_time_keeper[msg_idx++] = get_time_us();
     read_size_mutex.unlock();
     read_not_empty.notify_one();
+    delete tmp;
 }
 
 void MessageSender::send_msg_loop() {
@@ -626,6 +618,7 @@ void MessageSender::send_msg_loop() {
         // has item on the queue to send
         int n = epoll_wait(epoll_fd_send_msg, events, EPOLL_MAXEVENTS, -1);
         // log_trace("epoll returned {} sockets ready for write", n);
+        std::cerr << "size of buffer list = " << buffer_list.size() << std::endl;
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 // socket send buffer is available to send message
@@ -637,18 +630,17 @@ void MessageSender::send_msg_loop() {
                     continue;
                 }
                 // auto pos = (offset + head) % n_slots;
-                auto node = buffer_list.front();
+                auto node = buffer_list.front(); //!!!!! dangerous, a copy of char*
                 size_t payload_size = node.message_size;
                 auto requestType = node.message_type;
                 auto version = node.message_version;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = version;
-                std::cerr << "curr_seqno = " << curr_seqno << std::endl;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, local_site_id, payload_size});
+                sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
                 leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
@@ -673,7 +665,9 @@ void MessageSender::send_msg_loop() {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
+            buffer_list.front().Destruct();
             buffer_list.pop_front();
+            std::cerr << "size of buffer_list = " << buffer_list.size() << std::endl;
             // list_lock.lock();
             size_mutex.unlock();
             // list_lock.unlock();
@@ -706,7 +700,8 @@ void MessageSender::read_msg_loop() {
                 auto requestType = node.message_type;
                 auto version = node.message_version;
                 auto curr_seqno = R_last_sent_seqno[site_id] + 1;
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, local_site_id, payload_size});
+                read_callback_store[curr_seqno] = node.RRC;
+                sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size) {
                     throw std::runtime_error("Something went wrong with read requests");
                 }
@@ -733,11 +728,9 @@ void MessageSender::read_msg_loop() {
 }
 
 WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
-                               const PredicateLambda& pl, 
-                               const ReadRecvCallback& _RRC,
+                               const PredicateLambda& pl,
                                std::string log_level)
         : WanAgent(wan_group_config, log_level),
-          RRC(_RRC),
           has_new_ack(false),
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
@@ -760,8 +753,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             wan_group_config[WAN_AGENT_WINDOW_SIZE],  // TODO: useless after using linked list
             wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
             message_counters,
-            [this]() {},
-            _RRC);
+            [this]() {});
     // [this]() { this->report_new_ack(); });
     generate_predicate();
     recv_ack_thread = std::thread(&MessageSender::recv_ack_loop, message_sender.get());
