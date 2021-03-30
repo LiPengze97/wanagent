@@ -92,7 +92,7 @@ struct Response {
      * @param const RequestHeader&: the copy of request header
      * @param const char*: message in byte array
      */
-using RemoteMessageCallback = std::function<Blob(const RequestHeader&, 
+using RemoteMessageCallback = std::function<std::pair<uint64_t, Blob>(const RequestHeader&, 
                                                  const char*)>;
 using ReadRecvCallback = std::function<void(const uint64_t, const site_id_t, Blob&&)>;
 
@@ -238,7 +238,7 @@ struct LinkedBufferNode {
     uint32_t message_type;
     uint64_t message_version;
     ReadRecvCallback RRC;
-    LinkedBufferNode* next;
+    // LinkedBufferNode* next;
 
     LinkedBufferNode() {}
     void Destruct() {
@@ -337,9 +337,9 @@ public:
     std::mutex stability_frontier_set_mutex;
     std::condition_variable stability_frontier_set_cv;
 
-    std::map<uint64_t, read_promise_t> read_promise_store;
-    std::mutex read_promise_lock;
-    std::map<uint64_t, std::pair<persistent::version_t, Blob> > read_object_store;
+    // std::map<uint64_t, read_promise_t> read_promise_store;
+    // std::mutex read_promise_lock;
+    std::map<uint64_t, std::tuple<uint64_t, site_id_t, Blob> > read_object_store;
     std::map<uint64_t, uint64_t> read_recv_cnt;
 
     MessageSender(const site_id_t& local_site_id,
@@ -360,6 +360,7 @@ public:
     void predicate_calculation();
     void wait_stability_frontier_loop(int sf);
     void sf_time_checker_loop();
+    void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
     void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
     // void set_stability_frontier(int sf);
     void shutdown() {
@@ -427,7 +428,7 @@ public:
     virtual uint64_t send_write_req(const char* payload, const size_t payload_size, const uint64_t version=(uint64_t)-1) {
         return this->message_sender->enqueue(1, payload, payload_size, version);
     }
-    virtual void send_read_req(const uint64_t& version, const ReadRecvCallback RRC) {
+    virtual void send_read_req(const ReadRecvCallback RRC, const uint64_t version=(uint64_t)-1) {
         this->message_sender->read_enqueue(version, RRC);
     }
 
@@ -443,7 +444,7 @@ public:
     void set_stability_frontier(int sf);
     void test_predicate();
     /**
-         * return a moveable conter table
+         * return a moveable counter table
          */
     std::map<uint32_t, uint64_t> get_message_counters() noexcept(true) {
         std::map<uint32_t, uint64_t> counters;

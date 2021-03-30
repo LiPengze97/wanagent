@@ -164,12 +164,13 @@ int main(int argc, char** argv) {
         int t = (rand()&1);
         if (t || !valid_version.size()) {
             auto cur_version = wan_agent_sender.send_write_req(payload, message_size);
+            std::cerr << "current version = " + std::to_string(cur_version) + '\n';
             valid_version.push_back(cur_version);
             ++number_of_writes;
         }
         else {
             int sz = valid_version.size();
-            wan_agent_sender.send_read_req(valid_version[Rand(0, sz - 1)], (seq & 1) ? RRC_1 : RRC_2);
+            wan_agent_sender.send_read_req((seq & 1) ? RRC_1 : RRC_2);
         }
         //            std::cout << "send a message with size = " << message_size << std::endl;
         while(now_us() < (time_keeper[seq * 4] + send_interval_us)) {

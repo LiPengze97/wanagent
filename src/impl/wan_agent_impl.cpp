@@ -173,12 +173,18 @@ void RemoteMessageService::worker(int connected_sock_fd) {
             if(!success)
                 throw std::runtime_error("Failed to receive object");
         }
-        Blob obj = std::move(rmc(header, buffer.get()));
-        success = sock_write(connected_sock_fd, Response{obj.size, header.version, header.seq, local_site_id});
+        std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
+        success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
+        std::cout << "ACK sent of request = " << header.seq << " which is a " << (header.requestType ? "read":"write") << " request" << std::endl;
+        if (header.version != -1 && version_obj.first != header.version)
+            throw std::runtime_error("Receiver: something wrong with version");
         if(!success)
             throw std::runtime_error("Failed to send ACK message");
-        if (header.requestType == 0) { // read
-            success = sock_write(connected_sock_fd, obj.bytes, obj.size);
+        if (header.requestType == 0) { // read request
+            success = sock_write(connected_sock_fd, version_obj.first);
+            if (!success)
+                throw std::runtime_error("Failed to send version");
+            success = sock_write(connected_sock_fd, version_obj.second.bytes, version_obj.second.size);
             if (!success)
                 throw std::runtime_error("Failed to send all the bytes");
         }
@@ -215,13 +221,18 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     if(!success)
                         throw std::runtime_error("Failed to receive object");
                 }
-                Blob obj = std::move(rmc(header, buffer.get()));
-                success = sock_write(connected_sock_fd, Response{obj.size, header.version, header.seq, local_site_id});
+                std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
+                success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
                 std::cout << "ACK sent of request = " << header.seq << " which is a " << (header.requestType ? "read":"write") << " request" << std::endl;
+                if (header.version != -1 && version_obj.first != header.version)
+                    throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
                 if (header.requestType == 0) { // read request
-                    success &= sock_write(connected_sock_fd, obj.bytes, obj.size);
+                    success = sock_write(connected_sock_fd, version_obj.first);
+                    if (!success)
+                        throw std::runtime_error("Failed to send version");
+                    success = sock_write(connected_sock_fd, version_obj.second.bytes, version_obj.second.size);
                     if (!success)
                         throw std::runtime_error("Failed to send all the bytes");
                 }
@@ -339,6 +350,22 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
     log_exit_func();
 }
 
+void MessageSender::wait_read_predicate(const uint64_t seq,
+                                        const uint64_t version,
+                                        const site_id_t site,
+                                        Blob&& obj) {
+    read_recv_cnt[seq]++;
+    std::tuple<uint64_t, site_id_t, Blob>& cur_obj = read_object_store[seq];
+    if (version > std::get<0>(cur_obj)) {
+        cur_obj = std::move(std::tuple<uint64_t, site_id_t, Blob>(version, site, obj));
+    }
+    if (read_recv_cnt[seq] == nServer) {
+        read_callback_store[seq](std::get<0>(cur_obj), std::get<1>(cur_obj), std::move(std::get<2>(cur_obj)));
+        read_recv_cnt.erase(read_recv_cnt.find(seq));
+        read_callback_store.erase(read_callback_store.find(seq));
+    }
+}
+
 void MessageSender::trigger_read_callback(const uint64_t seq, 
                                           const uint64_t version, 
                                           const site_id_t site, 
@@ -398,12 +425,19 @@ void MessageSender::recv_read_ack_loop() {
                 std::cout << "received read ACK from " << res.site_id << " for msg " << res.seq << std::endl;
                 auto obj_size = res.payload_size;
                 if (obj_size) {
+                    uint64_t cur_version;
+                    success = sock_read(events[i].data.fd, cur_version);
+                    if (!success)
+                        throw std::runtime_error("Sender: Failed receiving object version");
                     Blob cur_obj = std::move(Blob(nullptr, obj_size));
                     success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
                     if (!success)
                         throw std::runtime_error("failed receiving object for read request");
-                    // check_read_tmp_store(res.version, res.version, std::move(Blob(std::move(obj_buf), obj_size)));
-                    trigger_read_callback(res.seq, res.version, res.site_id, std::move(cur_obj));
+                    if (res.version == -1) {
+                        wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
+                    } else {
+                        trigger_read_callback(res.seq, res.version, res.site_id, std::move(cur_obj));
+                    }
                 }
             }
         }

@@ -4,6 +4,7 @@
 #include <derecho/openssl/signature.hpp>
 #include <derecho/persistent/detail/util.hpp>
 #include <algorithm>
+#include <atomic>
 #include <arpa/inet.h>
 #include <condition_variable>
 #include <fstream>
@@ -27,6 +28,7 @@ using namespace persistent;
 
 /**** Key-Version Pairs ****/
 std::map<uint64_t, version_t> seq_versions;
+uint64_t max_version;
 
 int main(int argc, char** argv) {
     // TODO: should use code in wan_agent/wan_agent.hpp, not duplicated code.
@@ -61,14 +63,19 @@ int main(int argc, char** argv) {
             (*pblob) = std::move(Blob(msg, RH.payload_size));
             pblob.version(cur_version);
             seq_versions[RH.version] = cur_version;
+            assert(max_version < RH.version);
+            max_version = RH.version;
             pblob.persist(cur_version);
-            return std::move(Blob("done", 4));
+            return std::make_pair(RH.version, std::move(Blob("done", 4)));
         } else {
-            if (seq_versions.find(RH.version) == seq_versions.end()) {
-                return std::move(Blob("SEQ_NOT_FOUND", 13));
+            if (RH.version == (uint64_t)-1) {
+                auto cur_version = max_version;
+                return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
+            } else if (seq_versions.find(RH.version) == seq_versions.end()) {
+                return std::make_pair((uint64_t)-1, std::move(Blob("SEQ_NOT_FOUND", 13)));
             }
-            version_t cur_version = seq_versions[RH.version];
-            return std::move(*(pblob.get(cur_version)));
+            uint64_t cur_version = seq_versions[RH.version];
+            return std::make_pair(cur_version, std::move(*(pblob.get(cur_version))));
         }
     };
 
