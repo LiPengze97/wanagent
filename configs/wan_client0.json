@@ -6,7 +6,7 @@
     "local_site_id": 0,
     "max_payload_size": 102400,
     "window_size": 1000,
-    "predicate": "MAX($1,$2)",
+    "predicate": "MIN($1,$2)",
     "server_sites": [
         {
             "id": 1000,

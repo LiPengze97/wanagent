@@ -274,12 +274,14 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
                              const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                              const size_t& n_slots, const size_t& max_payload_size,
                              std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
+                             std::map<site_id_t, std::atomic<uint64_t>>& read_message_counters,
                              const ReportACKFunc& report_new_ack)
         : local_site_id(local_site_id),
           n_slots(n_slots),  // TODO: useless after using linked list
           last_all_sent_seqno(static_cast<uint64_t>(-1)),
           R_last_all_sent_seqno(static_cast<uint64_t>(-1)),
           message_counters(message_counters),
+          read_message_counters(read_message_counters),
           report_new_ack(report_new_ack),
           thread_shutdown(false) {
     log_enter_func();
@@ -355,14 +357,21 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
                                         const site_id_t site,
                                         Blob&& obj) {
     read_recv_cnt[seq]++;
+    if (disregards[seq]) {
+        if (read_recv_cnt[seq] == nServer) {
+            read_recv_cnt.erase(read_recv_cnt.find(seq));
+            disregards.erase(disregards.find(seq));
+        }
+        return;
+    }
     std::tuple<uint64_t, site_id_t, Blob>& cur_obj = read_object_store[seq];
     if (version > std::get<0>(cur_obj)) {
         cur_obj = std::move(std::tuple<uint64_t, site_id_t, Blob>(version, site, obj));
     }
-    if (read_recv_cnt[seq] == nServer) {
+    if (read_stability_frontier > seq) {
         read_callback_store[seq](std::get<0>(cur_obj), std::get<1>(cur_obj), std::move(std::get<2>(cur_obj)));
-        read_recv_cnt.erase(read_recv_cnt.find(seq));
         read_callback_store.erase(read_callback_store.find(seq));
+        disregards[seq] = 1;
     }
 }
 
@@ -424,20 +433,24 @@ void MessageSender::recv_read_ack_loop() {
                 }
                 std::cout << "received read ACK from " << res.site_id << " for msg " << res.seq << std::endl;
                 auto obj_size = res.payload_size;
-                if (obj_size) {
-                    uint64_t cur_version;
-                    success = sock_read(events[i].data.fd, cur_version);
-                    if (!success)
-                        throw std::runtime_error("Sender: Failed receiving object version");
-                    Blob cur_obj = std::move(Blob(nullptr, obj_size));
-                    success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
-                    if (!success)
-                        throw std::runtime_error("failed receiving object for read request");
-                    if (res.version == -1) {
-                        wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
-                    } else {
-                        trigger_read_callback(res.seq, res.version, res.site_id, std::move(cur_obj));
-                    }
+                if (!obj_size) {
+                    throw std::runtime_error("Read Request: Received an empty object");
+                }
+                uint64_t cur_version;
+                success = sock_read(events[i].data.fd, cur_version);
+                if (!success)
+                    throw std::runtime_error("Read Request: Failed receiving object version");
+                Blob cur_obj = std::move(Blob(nullptr, obj_size));
+                success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
+                if (!success)
+                    throw std::runtime_error("failed receiving object for read request");
+                read_message_counters[res.site_id]++;
+                read_predicate_calculation();
+                std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) << std::endl;
+                if (res.version == -1) {
+                    wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
+                } else {
+                    trigger_read_callback(res.seq, res.version, res.site_id, std::move(cur_obj));
                 }
             }
         }
@@ -514,7 +527,23 @@ void MessageSender::predicate_calculation() {
     // non_gccjit_calculation(test_arr);
     // sf_calculation_cost += (get_time_us() - sf_cal_st_time) / 1000000.0;
     // log_exit_func();
-}  // namespace wan_agent
+}
+
+void MessageSender::read_predicate_calculation() {
+    std::vector<int> value_ve;
+    std::vector<std::pair<site_id_t, uint64_t>> pair_ve;
+    value_ve.reserve(read_message_counters.size());
+    pair_ve.reserve(read_message_counters.size());
+    value_ve.push_back(0);
+    for(std::map<site_id_t, std::atomic<uint64_t>>::iterator it = read_message_counters.begin(); it != read_message_counters.end(); it++) {
+        value_ve.push_back(it->second.load());
+        pair_ve.push_back(std::make_pair(it->first, it->second.load()));
+    }
+    int* arr = &value_ve[0];
+
+    int val = inverse_predicate(5, arr);
+    read_stability_frontier = pair_ve[val - 1].second;
+}
 
 int MessageSender::non_gccjit_calculation(int* seq_vec) {
     int predicate_size = (int)operations.size();
@@ -652,7 +681,6 @@ void MessageSender::send_msg_loop() {
         // has item on the queue to send
         int n = epoll_wait(epoll_fd_send_msg, events, EPOLL_MAXEVENTS, -1);
         // log_trace("epoll returned {} sockets ready for write", n);
-        std::cerr << "size of buffer list = " << buffer_list.size() << std::endl;
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 // socket send buffer is available to send message
@@ -701,7 +729,6 @@ void MessageSender::send_msg_loop() {
             size_mutex.lock();
             buffer_list.front().Destruct();
             buffer_list.pop_front();
-            std::cerr << "size of buffer_list = " << buffer_list.size() << std::endl;
             // list_lock.lock();
             size_mutex.unlock();
             // list_lock.unlock();
@@ -769,15 +796,21 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
     predicate_experssion = wan_group_config[WAN_AGENT_PREDICATE];
+    inverse_predicate_expression = "MAX($1,$2)";
     std::istringstream iss(predicate_experssion);
+    std::istringstream i_iss(inverse_predicate_expression);
     predicate_generator = new Predicate_Generator(iss);
+    inverse_predicate_generator = new Predicate_Generator(i_iss);
     predicate = predicate_generator->get_predicate_function();
+    inverse_predicate = inverse_predicate_generator->get_predicate_function();
     std::cout << predicate_experssion << std::endl;
+    std::cout << inverse_predicate_expression << std::endl;
     // start predicate thread.
     // predicate_thread = std::thread(&WanAgentSender::predicate_loop, this);
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
         if(local_site_id != pair.first) {
             message_counters[pair.first] = 0;
+            read_message_counters[pair.first] = 0;
         }
     }
 
@@ -787,6 +820,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             wan_group_config[WAN_AGENT_WINDOW_SIZE],  // TODO: useless after using linked list
             wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
             message_counters,
+            read_message_counters,
             [this]() {});
     // [this]() { this->report_new_ack(); });
     generate_predicate();
@@ -796,6 +830,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     read_msg_thread = std::thread(&MessageSender::read_msg_loop, message_sender.get());
 
     message_sender->predicate = predicate;
+    message_sender->inverse_predicate = inverse_predicate;
 }
 
 // void WanAgentSender::report_new_ack()

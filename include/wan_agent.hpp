@@ -290,7 +290,8 @@ private:
     std::map<int, site_id_t> sockfd_to_server_site_id_map;
     std::map<int, site_id_t> R_sockfd_to_server_site_id_map;
 
-    std::map<site_id_t, std::atomic<uint64_t>>& message_counters; // only for "SEND" request
+    std::map<site_id_t, std::atomic<uint64_t>>& message_counters;
+    std::map<site_id_t, std::atomic<uint64_t>>& read_message_counters;
     const ReportACKFunc report_new_ack;
 
     std::atomic<bool> thread_shutdown;
@@ -311,6 +312,7 @@ public:
     uint64_t *enter_queue_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
     // wait for certaion stability frontier
     int stability_frontier = 0;
+    uint64_t read_stability_frontier = (uint64_t)0;
     // uint64_t *who_is_max = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
     // wait for what sf?
     int wait_target_sf = -1;
@@ -325,6 +327,7 @@ public:
     std::map<uint64_t, uint64_t> sf_arrive_time_map;
     std::map<uint64_t, uint64_t> remote_all_send_map;
     predicate_fn_type predicate;
+    predicate_fn_type inverse_predicate;
     predicate_fn_type complicate_predicate;
     std::map<std::string, predicate_fn_type> predicate_map;
     std::map<std::string, uint64_t> predicate_arrive_map;
@@ -341,23 +344,25 @@ public:
     // std::mutex read_promise_lock;
     std::map<uint64_t, std::tuple<uint64_t, site_id_t, Blob> > read_object_store;
     std::map<uint64_t, uint64_t> read_recv_cnt;
+    std::map<uint64_t, uint16_t> disregards;
 
     MessageSender(const site_id_t& local_site_id,
                   const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                   const size_t& n_slots, const size_t& max_payload_size,
                   std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
+                  std::map<site_id_t, std::atomic<uint64_t>>& read_message_counters,
                   const ReportACKFunc& report_new_ack);
     inline void update_max_version(const uint64_t& version) {
         max_version = std::max(version, max_version);
     }
     void recv_ack_loop();
     void recv_read_ack_loop();
-    // void check_read_tmp_store(const uint64_t seq, const persistent::version_t version, Blob&& obj);
     uint64_t enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version);
     void read_enqueue(const uint64_t& version, const ReadRecvCallback RRC);
     void send_msg_loop();
     void read_msg_loop();
     void predicate_calculation();
+    void read_predicate_calculation();
     void wait_stability_frontier_loop(int sf);
     void sf_time_checker_loop();
     void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
@@ -392,9 +397,13 @@ private:
     std::thread read_msg_thread;
     uint64_t all_start_time;
     std::map<site_id_t, std::atomic<uint64_t>> message_counters;
+    std::map<site_id_t, std::atomic<uint64_t>> read_message_counters;
     std::string predicate_experssion;
+    std::string inverse_predicate_expression;
     Predicate_Generator* predicate_generator;
+    Predicate_Generator* inverse_predicate_generator;
     predicate_fn_type predicate;
+    predicate_fn_type inverse_predicate;
     std::map<std::string, predicate_fn_type> predicate_map;
 
 public:
