@@ -2,8 +2,8 @@
     "version": "1.0.0",
     "transport": "tcp",
     "private_ip": "127.0.0.1",
-    "private_port": 36000,
-    "local_site_id": 1000,
+    "private_port": 36003,
+    "local_site_id": 1003,
     "max_payload_size": 102400,
     "window_size": 1000,
     "server_sites": [

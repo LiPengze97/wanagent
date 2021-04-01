@@ -6,7 +6,7 @@
     "local_site_id": 0,
     "max_payload_size": 102400,
     "window_size": 1000,
-    "predicate": "MIN($1,$2)",
+    "predicate": "KTH_MIN($2,MAX($1,$2),$3,$4)",
     "server_sites": [
         {
             "id": 1000,
@@ -17,6 +17,16 @@
             "id": 1001,
             "ip": "127.0.0.1",
             "port": 36001
+        },
+        {
+            "id": 1002,
+            "ip": "127.0.0.1",
+            "port": 36002
+        },
+        {
+            "id": 1003,
+            "ip": "127.0.0.1",
+            "port": 36003
         }
     ],
     "num_of_sender_sites": 1

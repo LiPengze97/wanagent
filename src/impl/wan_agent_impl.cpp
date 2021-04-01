@@ -406,6 +406,7 @@ void MessageSender::recv_ack_loop() {
                 message_counters[res.site_id]++;
                 uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
+                std::cout << "current write stability frontier = " << stability_frontier << std::endl;
                 transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 // if(res.seq == wait_target_sf) {
                 //     ack_keeper[res.site_id - 1000] = get_time_us();
@@ -796,7 +797,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
     predicate_experssion = wan_group_config[WAN_AGENT_PREDICATE];
-    inverse_predicate_expression = "MAX($1,$2)";
+    inverse_predicate_expression = reverser::get_inverse_predicate(predicate_experssion);
     std::istringstream iss(predicate_experssion);
     std::istringstream i_iss(inverse_predicate_expression);
     predicate_generator = new Predicate_Generator(iss);
