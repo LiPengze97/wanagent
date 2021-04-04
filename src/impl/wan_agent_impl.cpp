@@ -209,7 +209,6 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
         int n = epoll_wait(epoll_fd_recv_msg, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLIN) {
-                std::cout << "get event from fd " + std::to_string(events[i].data.fd) + '\n';
                 success = sock_read(connected_sock_fd, header);
                 if(!success) {
                     std::cout << "Failed to read request header, "
