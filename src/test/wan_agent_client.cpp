@@ -80,9 +80,9 @@ int main(int argc, char** argv) {
     uint64_t* time_keeper = nullptr;
     std::atomic<bool> all_received(false);
 
-    std::cout << "number_of_messages = " << number_of_messages << std::endl;
-    std::cout << "message_size = " << message_size << std::endl;
-    std::cout << "intervals = " << send_interval_us << " us" << std::endl;
+    std::cerr << "number_of_messages = " << number_of_messages << std::endl;
+    std::cerr << "message_size = " << message_size << std::endl;
+    std::cerr << "intervals = " << send_interval_us << " us" << std::endl;
     if(number_of_messages <= 0 || message_size <= 0 || send_interval_us < 0) {
         std::cerr << "invalid argument." << std::endl;
         return -1;
@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
         bzero(static_cast<void*>(time_keeper), sizeof(uint64_t) * 4 * number_of_messages);
     }
 
-    std::cout << "time_keeper:" << time_keeper << std::endl;
+    std::cerr << "time_keeper:" << time_keeper << std::endl;
     size_t number_of_writes = 0;
     wan_agent::PredicateLambda pl = [&](const std::map<uint32_t, uint64_t>& table) {
         if(time_keeper != nullptr) {
@@ -133,11 +133,11 @@ int main(int argc, char** argv) {
     };
 
     wan_agent::ReadRecvCallback RRC_1 = [](const uint64_t version, const site_id_t site, Blob&& obj) {
-        std::cout << "1111 Receive Object of version = " << version << " obj = " << obj.bytes << " from site = " << site << std::endl;
+        std::cerr << "Read: 1 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + std::to_string(site) + '\n';
     };
 
     wan_agent::ReadRecvCallback RRC_2 = [](const uint64_t version, const site_id_t site, Blob&& obj) {
-        std::cout << "2222 Receive Object of version = " << version << " obj = " << obj.bytes << " from site = " << site << std::endl;
+        std::cerr << "Read: 2 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + std::to_string(site) + '\n';
     };
 
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);
@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
         int t = (rand()&1);
         if (t || !valid_version.size()) {
             auto cur_version = wan_agent_sender.send_write_req(payload, message_size);
-            std::cerr << "current version = " + std::to_string(cur_version) + '\n';
+            std::cerr << "write: current version = " + std::to_string(cur_version) + '\n';
             valid_version.push_back(cur_version);
             ++number_of_writes;
         }

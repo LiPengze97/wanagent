@@ -175,7 +175,7 @@ void RemoteMessageService::worker(int connected_sock_fd) {
         }
         std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
         success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-        std::cout << "ACK sent of request = " << header.seq << " which is a " << (header.requestType ? "read":"write") << " request" << std::endl;
+        std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") + " request" + '\n';
         if (header.version != -1 && version_obj.first != header.version)
             throw std::runtime_error("Receiver: something wrong with version");
         if(!success)
@@ -209,7 +209,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
         int n = epoll_wait(epoll_fd_recv_msg, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLIN) {
-                std::cout << "get event from fd " << events[i].data.fd << std::endl;
+                std::cout << "get event from fd " + std::to_string(events[i].data.fd) + '\n';
                 success = sock_read(connected_sock_fd, header);
                 if(!success) {
                     std::cout << "Failed to read request header, "
@@ -223,7 +223,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-                std::cout << "ACK sent of request = " << header.seq << " which is a " << (header.requestType ? "read":"write") << " request" << std::endl;
+                std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
                 if (header.version != -1 && version_obj.first != header.version)
                     throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
@@ -402,11 +402,11 @@ void MessageSender::recv_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received ACK from " << res.site_id << " for msg " << res.version << std::endl;
+                std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';
                 message_counters[res.site_id]++;
                 uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
-                std::cout << "current write stability frontier = " << stability_frontier << std::endl;
+                std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
                 transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 // if(res.seq == wait_target_sf) {
                 //     ack_keeper[res.site_id - 1000] = get_time_us();
@@ -432,7 +432,7 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received read ACK from " << res.site_id << " for msg " << res.seq << std::endl;
+                std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
@@ -447,7 +447,7 @@ void MessageSender::recv_read_ack_loop() {
                     throw std::runtime_error("failed receiving object for read request");
                 read_message_counters[res.site_id]++;
                 read_predicate_calculation();
-                std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) << std::endl;
+                std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
                 if (res.version == -1) {
                     wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
                 } else {
