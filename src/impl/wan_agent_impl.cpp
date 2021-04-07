@@ -175,7 +175,7 @@ void RemoteMessageService::worker(int connected_sock_fd) {
         }
         std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
         success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-        std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") + " request" + '\n';
+        // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") + " request" + '\n';
         if (header.version != -1 && version_obj.first != header.version)
             throw std::runtime_error("Receiver: something wrong with version");
         if(!success)
@@ -222,9 +222,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-                std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") << " request\n";
-                if (header.version != -1 && version_obj.first != header.version)
-                    throw std::runtime_error("Receiver: something wrong with version");
+                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") << " request\n";
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
                 if (header.requestType == 0) { // read request
@@ -364,7 +362,7 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         return;
     }
     std::tuple<uint64_t, site_id_t, Blob>& cur_obj = read_object_store[seq];
-    if (version > std::get<0>(cur_obj)) {
+    if ((version != uint64_t(-1) && (version > std::get<0>(cur_obj) || std::get<0>(cur_obj) == uint64_t(-1))) || std::get<0>(cur_obj) == 0) {
         cur_obj = std::move(std::tuple<uint64_t, site_id_t, Blob>(version, site, obj));
     }
     if (read_stability_frontier > seq) {
@@ -396,7 +394,9 @@ void MessageSender::wait_write_predicate(const uint64_t seq) {
         return;
     }
     if (stability_frontier >= seq) {
-        (*(write_callback_store[seq]))();
+        if (write_callback_store[seq] != nullptr) {
+            (*(write_callback_store[seq]))();
+        }
         write_callback_store.erase(write_callback_store.find(seq));
         w_disregards[seq] = 1;
     }
@@ -417,11 +417,11 @@ void MessageSender::recv_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';
+                // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';
                 message_counters[res.site_id]++;
                 uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
-                std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
+                // std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
                 wait_write_predicate(res.seq);
                 transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 // if(res.seq == wait_target_sf) {
@@ -448,7 +448,7 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
+                // std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
@@ -463,12 +463,8 @@ void MessageSender::recv_read_ack_loop() {
                     throw std::runtime_error("failed receiving object for read request");
                 read_message_counters[res.site_id]++;
                 read_predicate_calculation();
-                std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
-                if (res.version == -1) {
-                    wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
-                } else {
-                    trigger_read_callback(res.seq, res.version, res.site_id, std::move(cur_obj));
-                }
+                // std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
+                wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
             }
         }
     }
@@ -493,8 +489,8 @@ void MessageSender::predicate_calculation() {
     stability_frontier = pair_ve[val - 1].second;
 
     /**general recording all sf at every 5000 message**/
-    if((stability_frontier + 1) % 5000 == 0) {
-        std::cout << stability_frontier << std::endl;
+    // if((stability_frontier + 1) % 5000 == 0) {
+        // std::cout << stability_frontier << std::endl;
     //     sf_arrive_time_map[stability_frontier] = get_time_us();
     //     for(int i = 1; i < (int)value_ve.size(); i++) {
     //         std::cout << arr[i] << " ";
@@ -508,7 +504,7 @@ void MessageSender::predicate_calculation() {
     //         tmp_idx++;
     //     }
     //     all_sf_tics++;
-    }
+    // }
 
     /**wait for certain file size, and record the first time it arrives**/
     // for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
@@ -522,19 +518,19 @@ void MessageSender::predicate_calculation() {
     // }
 
     /**record every message arrive to see each file's performance**/
-    int predicate_idx = 6;
-    for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
-        int tmp_val = it->second(5, arr);
-        int tmp_sf = pair_ve[tmp_val - 1].second;
-        if(tmp_sf > 0 && sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] == 0) {
-            sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] = get_time_us();
-        }
-        // if(tmp_sf > 0 && it->first == "MAX_NODE" && who_is_max[tmp_sf] == 0) {
-        //     who_is_max[tmp_sf] = pair_ve[tmp_val - 1].first;
-        // }
+    // int predicate_idx = 6;
+    // for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
+    //     int tmp_val = it->second(5, arr);
+    //     int tmp_sf = pair_ve[tmp_val - 1].second;
+    //     if(tmp_sf > 0 && sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] == 0) {
+    //         sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] = get_time_us();
+    //     }
+    //     // if(tmp_sf > 0 && it->first == "MAX_NODE" && who_is_max[tmp_sf] == 0) {
+    //     //     who_is_max[tmp_sf] = pair_ve[tmp_val - 1].first;
+    //     // }
 
-        predicate_idx--;
-    }
+    //     predicate_idx--;
+    // }
     stability_frontier_arrive_cv.notify_one();
 
     /**comparation with gccjit and none gccjit**/
@@ -715,6 +711,7 @@ void MessageSender::send_msg_loop() {
                 size_t payload_size = node.message_size;
                 auto requestType = node.message_type;
                 auto version = node.message_version;
+                if (last_sent_seqno[site_id] != uint64_t(-1) && last_sent_seqno[site_id] >= version) continue;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = version;
@@ -1017,10 +1014,10 @@ void WanAgentSender::out_out_file() {
 }
 
 void WanAgentSender::shutdown_and_wait() {
-    std::cout << "all done! " << get_time_us() << std::endl;
-    std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
-    // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
-    std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
+    // std::cout << "all done! " << get_time_us() << std::endl;
+    // std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
+    // // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
+    // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
     // std::cout << "per latency " << ((message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0) / 100000 << std::endl;
     log_enter_func();
     is_shutdown.store(true);

@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
         std::cerr << "Read: 2 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + std::to_string(site) + '\n';
     };
 
-    wan_agent:WriteRecvCallback WRC = []() {
+    wan_agent::WriteRecvCallback WRC = []() {
         std::cerr << "Write predicate arrive" << std::endl;
     };
 
