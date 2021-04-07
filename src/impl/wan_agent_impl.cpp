@@ -175,7 +175,7 @@ void RemoteMessageService::worker(int connected_sock_fd) {
         }
         std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
         success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-        std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") + " request" + '\n';
+        std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") + " request" + '\n';
         if (header.version != -1 && version_obj.first != header.version)
             throw std::runtime_error("Receiver: something wrong with version");
         if(!success)
@@ -222,7 +222,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-                std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
+                std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") << " request\n";
                 if (header.version != -1 && version_obj.first != header.version)
                     throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
@@ -368,7 +368,7 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         cur_obj = std::move(std::tuple<uint64_t, site_id_t, Blob>(version, site, obj));
     }
     if (read_stability_frontier > seq) {
-        read_callback_store[seq](std::get<0>(cur_obj), std::get<1>(cur_obj), std::move(std::get<2>(cur_obj)));
+        (*(read_callback_store[seq]))(std::get<0>(cur_obj), std::get<1>(cur_obj), std::move(std::get<2>(cur_obj)));
         read_callback_store.erase(read_callback_store.find(seq));
         disregards[seq] = 1;
     }
@@ -379,10 +379,26 @@ void MessageSender::trigger_read_callback(const uint64_t seq,
                                           const site_id_t site, 
                                           Blob&& obj) {
     read_recv_cnt[seq]++;
-    read_callback_store[seq](version, site, std::move(obj));
+    (*(read_callback_store[seq]))(version, site, std::move(obj));
     if (read_recv_cnt[seq] == nServer) {
         read_recv_cnt.erase(read_recv_cnt.find(seq));
         read_callback_store.erase(read_callback_store.find(seq));
+    }
+}
+
+void MessageSender::wait_write_predicate(const uint64_t seq) {
+    write_recv_cnt[seq]++;
+    if (w_disregards[seq]) {
+        if (write_recv_cnt[seq] == nServer) {
+            write_recv_cnt.erase(write_recv_cnt.find(seq));
+            w_disregards.erase(w_disregards.find(seq));
+        }
+        return;
+    }
+    if (stability_frontier >= seq) {
+        (*(write_callback_store[seq]))();
+        write_callback_store.erase(write_callback_store.find(seq));
+        w_disregards[seq] = 1;
     }
 }
 
@@ -406,6 +422,7 @@ void MessageSender::recv_ack_loop() {
                 uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
                 std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
+                wait_write_predicate(res.seq);
                 transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 // if(res.seq == wait_target_sf) {
                 //     ack_keeper[res.site_id - 1000] = get_time_us();
@@ -620,7 +637,7 @@ void MessageSender::wait_stability_frontier_loop(int sf) {
     stability_frontier_set_cv.notify_one();
 }
 
-uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version=(uint64_t)-1) {
+uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC) {
         // std::unique_lock<std::mutex> lock(mutex);
     size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
@@ -634,6 +651,7 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
     }
     tmp->message_type = requestType;
     tmp->RRC = nullptr;
+    tmp->WRC = WRC;
 
     uint64_t ret = 0;
     if (version == (uint64_t)-1) {
@@ -653,7 +671,7 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
     return ret;
 }
 
-void MessageSender::read_enqueue(const uint64_t& version, const ReadRecvCallback RRC) {
+void MessageSender::read_enqueue(const uint64_t& version, ReadRecvCallback* RRC) {
     read_size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
     tmp->message_body = nullptr;
@@ -661,6 +679,7 @@ void MessageSender::read_enqueue(const uint64_t& version, const ReadRecvCallback
     tmp->message_type = 0;
     tmp->message_version = version;
     tmp->RRC = RRC;
+    tmp->WRC = nullptr;
 
     read_buffer_list.push_back(std::move(*tmp));
     // enter_queue_time_keeper[msg_idx++] = get_time_us();
@@ -699,6 +718,7 @@ void MessageSender::send_msg_loop() {
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = version;
+                write_callback_store[curr_seqno] = node.WRC;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();

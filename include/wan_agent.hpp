@@ -84,7 +84,7 @@ struct RequestHeader {
 struct Response {
     size_t payload_size;
     uint64_t version;
-    uint64_t seq; //this is for read request
+    uint64_t seq;
     uint32_t site_id;
 };
 
@@ -96,6 +96,7 @@ struct Response {
 using RemoteMessageCallback = std::function<std::pair<uint64_t, Blob>(const RequestHeader&, 
                                                  const char*)>;
 using ReadRecvCallback = std::function<void(const uint64_t, const site_id_t, Blob&&)>;
+using WriteRecvCallback = std::function<void()>;
 
 /**
      * The Wan Agent abstract class
@@ -238,7 +239,8 @@ struct LinkedBufferNode {
     char* message_body;
     uint32_t message_type;
     uint64_t message_version;
-    ReadRecvCallback RRC;
+    ReadRecvCallback* RRC;
+    WriteRecvCallback* WRC;
     // LinkedBufferNode* next;
 
     LinkedBufferNode() {}
@@ -301,7 +303,8 @@ private:
     int nServer;
     uint64_t max_version = 0;
 
-    std::map<uint64_t, ReadRecvCallback> read_callback_store;
+    std::map<uint64_t, ReadRecvCallback*> read_callback_store;
+    std::map<uint64_t, WriteRecvCallback*> write_callback_store;
 
 public:
     std::vector<pre_operation> operations;
@@ -346,6 +349,9 @@ public:
     std::map<uint64_t, std::tuple<uint64_t, site_id_t, Blob> > read_object_store;
     std::map<uint64_t, uint64_t> read_recv_cnt;
     std::map<uint64_t, uint16_t> disregards;
+    std::map<uint64_t, uint16_t> w_disregards;
+
+    std::map<uint64_t, uint64_t> write_recv_cnt;
 
     MessageSender(const site_id_t& local_site_id,
                   const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
@@ -358,8 +364,8 @@ public:
     }
     void recv_ack_loop();
     void recv_read_ack_loop();
-    uint64_t enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version);
-    void read_enqueue(const uint64_t& version, const ReadRecvCallback RRC);
+    uint64_t enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC);
+    void read_enqueue(const uint64_t& version, ReadRecvCallback* RRC);
     void send_msg_loop();
     void read_msg_loop();
     void predicate_calculation();
@@ -368,6 +374,7 @@ public:
     void sf_time_checker_loop();
     void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
     void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
+    void wait_write_predicate(const uint64_t seq);
     // void set_stability_frontier(int sf);
     void shutdown() {
         thread_shutdown.store(true);
@@ -433,12 +440,12 @@ public:
          * send the message
          */
     virtual void send(const char* message, const size_t message_size) {
-        this->message_sender->enqueue(1, message, message_size, uint64_t(-1));
+        this->message_sender->enqueue(1, message, message_size, uint64_t(-1), nullptr);
     }
-    virtual uint64_t send_write_req(const char* payload, const size_t payload_size, const uint64_t version=(uint64_t)-1) {
-        return this->message_sender->enqueue(1, payload, payload_size, version);
+    virtual uint64_t send_write_req(const char* payload, const size_t payload_size, WriteRecvCallback* WRC, const uint64_t version=(uint64_t)-1) {
+        return this->message_sender->enqueue(1, payload, payload_size, version, WRC);
     }
-    virtual void send_read_req(const ReadRecvCallback RRC, const uint64_t version=(uint64_t)-1) {
+    virtual void send_read_req(ReadRecvCallback* RRC, const uint64_t version=(uint64_t)-1) {
         this->message_sender->read_enqueue(version, RRC);
     }
 

@@ -140,6 +140,10 @@ int main(int argc, char** argv) {
         std::cerr << "Read: 2 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + std::to_string(site) + '\n';
     };
 
+    wan_agent:WriteRecvCallback WRC = []() {
+        std::cerr << "Write predicate arrive" << std::endl;
+    };
+
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);
 
     std::cerr << "Press ENTER to send a message." << std::endl;
@@ -163,14 +167,14 @@ int main(int argc, char** argv) {
         time_keeper[seq * 4] = now_us();
         int t = (rand()&1);
         if (t || !valid_version.size()) {
-            auto cur_version = wan_agent_sender.send_write_req(payload, message_size);
+            auto cur_version = wan_agent_sender.send_write_req(payload, message_size, &WRC);
             std::cerr << "write: current version = " + std::to_string(cur_version) + '\n';
             valid_version.push_back(cur_version);
             ++number_of_writes;
         }
         else {
             int sz = valid_version.size();
-            wan_agent_sender.send_read_req((seq & 1) ? RRC_1 : RRC_2);
+            wan_agent_sender.send_read_req((seq & 1) ? &RRC_1 : &RRC_2);
         }
         //            std::cout << "send a message with size = " << message_size << std::endl;
         while(now_us() < (time_keeper[seq * 4] + send_interval_us)) {
