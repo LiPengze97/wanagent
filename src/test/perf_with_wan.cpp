@@ -41,7 +41,7 @@ static void print_help(const char* cmd) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
-#define expected_mps (300)
+#define expected_mps (200)
 
 const int MAXOPS = 1e5 + 100;
 
@@ -56,12 +56,10 @@ uint64_t tot_write_ops = 0;
 
 struct W {
     int seq;
-    std::promise<int> P;
     wan_agent::WriteRecvCallback C;
     W() {
         C = [&]() {
             w_arrive_time[seq] = now_us();
-            P.set_value(0);
         };
     }
     void set_seq(int _seq) { seq = _seq; }
@@ -69,12 +67,10 @@ struct W {
 
 struct R {
     int seq;
-    std::promise<int> P;
     wan_agent::ReadRecvCallback C;
     R() {
         C = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
             r_arrive_time[seq] = now_us();
-            P.set_value(0);
         };
     }
     void set_seq(int _seq) { seq = _seq; }
@@ -200,9 +196,8 @@ int main(int argc, char** argv) {
         if (load_ctr % 1000 == 0) cerr << load_ctr << endl;
         
         if (load_ctr == num_load) {
-            auto waiter = wnodes[0].P.get_future();
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[0].C);
-            waiter.get();
+            while (!w_arrive_time[0]) {}
         }
         else {
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
@@ -239,11 +234,7 @@ int main(int argc, char** argv) {
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[write_ctr].C);
         }
     }
-    auto w_wait = wnodes[write_ctr].P.get_future();
-    auto t = w_wait.get();
-
-    auto r_wait = rnodes[read_ctr].P.get_future();
-    t = r_wait.get();
+    while (!w_arrive_time[write_ctr] || !r_arrive_time[read_ctr]) {}
 
     check_out(read_ctr, write_ctr);
 
