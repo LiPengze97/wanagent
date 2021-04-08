@@ -1,31 +1,31 @@
 {
     "version": "1.0.0",
     "transport": "tcp",
-    "private_ip": "127.0.0.1",
-    "private_port": 36001,
+    "private_ip": "10.0.0.13",
+    "private_port": 36000,
     "local_site_id": 1001,
     "max_payload_size": 102400,
     "window_size": 1000,
     "server_sites": [
         {
             "id": 1000,
-            "ip": "127.0.0.1",
+            "ip": "10.0.0.1",
             "port": 36000
         },
         {
             "id": 1001,
-            "ip": "127.0.0.1",
-            "port": 36001
+            "ip": "10.0.0.13",
+            "port": 36000
         },
         {
             "id": 1002,
-            "ip": "127.0.0.1",
-            "port": 36002
+            "ip": "10.0.0.14",
+            "port": 36000
         },
         {
             "id": 1003,
-            "ip": "127.0.0.1",
-            "port": 36003
+            "ip": "10.0.0.39",
+            "port": 36000
         }
     ],
     "num_of_sender_sites": 1
