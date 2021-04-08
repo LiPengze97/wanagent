@@ -702,7 +702,7 @@ void MessageSender::send_msg_loop() {
                 site_id_t site_id = sockfd_to_server_site_id_map[events[i].data.fd];
                 // log_trace("send buffer is available for site {}.", site_id);
                 auto offset = last_sent_seqno[site_id] - last_all_sent_seqno;
-                if(offset == buffer_list.size()) {
+                if(offset) {
                     // all messages on the buffer have been sent for this site_id
                     continue;
                 }
@@ -711,7 +711,6 @@ void MessageSender::send_msg_loop() {
                 size_t payload_size = node.message_size;
                 auto requestType = node.message_type;
                 auto version = node.message_version;
-                if (last_sent_seqno[site_id] != uint64_t(-1) && last_sent_seqno[site_id] >= version) continue;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = version;
@@ -770,7 +769,7 @@ void MessageSender::read_msg_loop() {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];
                 auto offset = R_last_sent_seqno[site_id] - R_last_all_sent_seqno;
-                if(offset == read_buffer_list.size()) {
+                if(offset) {
                     continue;
                 }
                 auto node = read_buffer_list.front();
