@@ -224,14 +224,14 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
-                // if (header.requestType == 0) { // read request
-                //     success = sock_write(connected_sock_fd, version_obj.first);
-                //     if (!success)
-                //         throw std::runtime_error("Failed to send version");
-                //     success = sock_write(connected_sock_fd, version_obj.second.bytes, version_obj.second.size);
-                //     if (!success)
-                //         throw std::runtime_error("Failed to send all the bytes");
-                // }
+                if (header.requestType == 0) { // read request
+                    success = sock_write(connected_sock_fd, version_obj.first);
+                    if (!success)
+                        throw std::runtime_error("Failed to send version");
+                    success = sock_write(connected_sock_fd, version_obj.second.bytes, version_obj.second.size);
+                    if (!success)
+                        throw std::runtime_error("Failed to send all the bytes");
+                }
             }
         }
     }
@@ -449,14 +449,14 @@ void MessageSender::recv_read_ack_loop() {
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
                 }
-                uint64_t cur_version = 0;
-                //success = sock_read(events[i].data.fd, cur_version);
-                // if (!success)
-                //     throw std::runtime_error("Read Request: Failed receiving object version");
+                uint64_t cur_version;
+                success = sock_read(events[i].data.fd, cur_version);
+                if (!success)
+                    throw std::runtime_error("Read Request: Failed receiving object version");
                 Blob cur_obj = std::move(Blob(nullptr, obj_size));
-                //success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
-                // if (!success)
-                //     throw std::runtime_error("failed receiving object for read request");
+                success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
+                if (!success)
+                    throw std::runtime_error("failed receiving object for read request");
                 read_message_counters[res.site_id]++;
                 read_predicate_calculation();
                 // std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
