@@ -32,7 +32,7 @@ static inline int Rand(int L, int R) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
-#define MESSAGE_SIZE (1000)
+#define MESSAGE_SIZE (8000)
 
 const int MAXOPS = 1e5 + 100;
 
