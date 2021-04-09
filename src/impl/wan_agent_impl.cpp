@@ -782,7 +782,7 @@ void MessageSender::read_msg_loop() {
         }
 
         if (R_last_all_sent_seqno % 1000 == 0) 
-            std::cerr << "hiiiii " << R_last_all_sent_seqno << std::endl;
+            std::cerr << "hiiiii " << R_last_all_sent_seqno << ' ' << read_buffer_list.size() << std::endl;
 
         auto it = std::min_element(R_last_sent_seqno.begin(), R_last_sent_seqno.end(),
                                    [](const auto& p1, const auto& p2) { 
