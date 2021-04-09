@@ -87,10 +87,43 @@ inline void check_out(const int read_cnt, const int write_cnt) {
         assert(w_arrive_time[i] > w_send_time[i]);
         w_tot_wait_time += (w_arrive_time[i] - w_send_time[i]);
     }
-    std::cout << "average read latency = " << (long double)r_tot_wait_time / read_cnt << "(us) " 
-              << (long double)r_tot_wait_time / read_cnt / 1000 << "(ms)" << endl;
-    std::cout << "average write latency = " << (long double)w_tot_wait_time / write_cnt << "(us) " 
-              << (long double)w_tot_wait_time / write_cnt / 1000 << "(ms)" << endl;
+    long double r_mean_us = (long double)r_tot_wait_time/read_cnt;
+    long double w_mean_us = (long double)w_tot_wait_time/write_cnt;
+    long double r_mean_ms = (long double)r_mean_us/1000.0;
+    long double w_mean_ms = (long double)w_mean_us/1000.0;
+
+    long double w_std = 0;
+    long double r_std = 0;
+    for (int i = 1; i <= read_cnt; ++i) {
+        long double dur = (r_arrive_time[i] - r_send_time[i])/1000.0;
+        r_std += (dur - r_mean_ms) * (dur - r_mean_ms);
+    }
+    r_std /= (long double)(read_cnt - 1);
+    r_std = sqrt(r_std);
+    for (int i = 1; i <= write_cnt; ++i) {
+        long double dur = (w_arrive_time[i] - w_send_time[i])/1000.0;
+        w_std += (dur - w_mean_ms) * (dur - w_mean_ms);
+    }
+    w_std /= (long double)(write_cnt - 1);
+    w_std = sqrt(w_std);
+
+    long double tot_dur = std::max(r_arrive_time[read_cnt], w_arrive_time[write_cnt])
+                        - std::min(w_send_time[1], r_send_time[1]);
+    
+    long double tot_bytes = 1000.0 * 100000;
+    long double tot_ops = 100000;
+
+    long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
+    long double thp_ops = tot_ops * 1000000/tot_dur;
+    
+    std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
+    std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
+    std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
+              << r_mean_ms << "(ms)" << endl;
+    std::cout << "Average Write Latency = " << w_mean_us << "(us) " 
+              << w_mean_ms << "(ms)" << endl;
+    std::cout << "Std of read latency = " << r_std << endl;
+    std::cout << "Std of write latency = " << w_std << endl;
 }
 
 int main(int argc, char** argv) {
