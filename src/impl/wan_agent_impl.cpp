@@ -701,11 +701,10 @@ void MessageSender::send_msg_loop() {
                 site_id_t site_id = sockfd_to_server_site_id_map[events[i].data.fd];
                 // log_trace("send buffer is available for site {}.", site_id);
                 auto offset = last_sent_seqno[site_id] - last_all_sent_seqno;
-                if(offset || offset == buffer_list.size()) {
+                if(offset == buffer_list.size()) {
                     // all messages on the buffer have been sent for this site_id
                     continue;
                 }
-                assert(buffer_list.size());
                 // auto pos = (offset + head) % n_slots;
                 auto node = buffer_list.front(); //!!!!! dangerous, a copy of char*
                 size_t payload_size = node.message_size;
@@ -765,12 +764,12 @@ void MessageSender::read_msg_loop() {
         std::unique_lock<std::mutex> lock(read_mutex);
         read_not_empty.wait(lock, [this]() { return read_buffer_list.size() > 0; });
         int n = epoll_wait(epoll_fd_read_msg, events, EPOLL_MAXEVENTS, -1);
-        std::cout << "read all send seqno = " + std::to_string(R_last_all_sent_seqno) + '\n';
+        if (R_last_all_sent_seqno % 5000 == 0) std::cout << "read all send seqno = " + std::to_string(R_last_all_sent_seqno) + '\n';
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];
                 auto offset = R_last_sent_seqno[site_id] - R_last_all_sent_seqno;
-                if(offset || offset == read_buffer_list.size()) {
+                if(offset == read_buffer_list.size()) {
                     continue;
                 }
                 auto node = read_buffer_list.front();
