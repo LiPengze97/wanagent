@@ -41,7 +41,6 @@ static void print_help(const char* cmd) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
-#define expected_mps (400)
 
 const int MAXOPS = 1e5 + 100;
 
@@ -133,8 +132,8 @@ int main(int argc, char** argv) {
     std::string trace_name = "";
 
     int num_load = 0;
-
-    while((opt = getopt(argc, argv, "c:t:n:")) != -1) {
+    int expected_mps = 200;
+    while((opt = getopt(argc, argv, "c:t:n:p:")) != -1) {
         switch(opt) {
             case 'c':
                 json_config = optarg;
@@ -144,6 +143,9 @@ int main(int argc, char** argv) {
                 break;
             case 'n':
                 num_load = static_cast<int>(std::stoi(optarg));
+                break;
+            case 'p':
+                expected_mps = static_cast<int>(std::stoi(optarg));
                 break;
             default:
                 std::cerr << "please enter config and trace" << std::endl;
