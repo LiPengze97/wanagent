@@ -75,7 +75,7 @@ struct R {
     void set_seq(int _seq) { seq = _seq; }
 } rnodes[MAXOPS];
 
-inline void check_out(const int read_cnt, const int write_cnt) {
+inline void check_out(const int read_cnt, const int write_cnt, const string& trace) {
     uint64_t r_tot_wait_time = 0;
     uint64_t w_tot_wait_time = 0;
     for (int i = 1; i <= read_cnt; ++i) {
@@ -115,6 +115,16 @@ inline void check_out(const int read_cnt, const int write_cnt) {
     long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
     long double thp_ops = tot_ops * 1000000/tot_dur;
     
+    std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
+    std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
+    std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
+              << r_mean_ms << "(ms)" << endl;
+    std::cout << "Average Write Latency = " << w_mean_us << "(us) " 
+              << w_mean_ms << "(ms)" << endl;
+    std::cout << "Std of read latency = " << r_std << endl;
+    std::cout << "Std of write latency = " << w_std << endl;
+
+    freopen((trace+".log").c_str(), "w", stdout);
     std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
     std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
     std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
@@ -223,7 +233,9 @@ int main(int argc, char** argv) {
 
     std::ifstream L_fin(("../../../../"+trace_name+".load").c_str());
     std::ifstream T_fin(("../../../../"+trace_name+".trans").c_str());
+    string tmp = "";
     string obj = "";
+    for (int i = 1; i <= 5000; ++i) obj += 'a';
     int load_ctr = 0;
     std::cerr << "Starting loading ..." << std::endl;
     while (L_fin >> obj) {
@@ -263,7 +275,7 @@ int main(int argc, char** argv) {
             r_send_time[read_ctr] = now_us();
             wan_agent_sender.send_read_req(&rnodes[read_ctr].C, version);
         } else {
-            T_fin >> obj;
+            T_fin >> tmp;
             ++write_ctr;
             w_send_time[write_ctr] = now_us();
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[write_ctr].C);
@@ -271,7 +283,7 @@ int main(int argc, char** argv) {
     }
     while (!w_arrive_time[write_ctr] || !r_arrive_time[read_ctr]) {}
 
-    check_out(read_ctr, write_ctr);
+    check_out(read_ctr, write_ctr, trace_name);
 
     std::cerr << "Press ENTER to kill." << std::endl;
     std::cin.get();

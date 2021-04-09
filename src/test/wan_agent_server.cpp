@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
     int ops_ctr = 0;
 
     std::string obj = "";
-    for (int i = 0; i < 1000; ++i) obj += 'a';
+    for (int i = 0; i < 5000; ++i) obj += 'a';
 
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader& RH, const char* msg) {
         // cout << "message received from site:" << RH.site_id
