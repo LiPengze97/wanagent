@@ -252,7 +252,8 @@ int main(int argc, char** argv) {
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
         }
     }
-    while ((write_ctr != write_recv_cnt) || (read_ctr && read_recv_cnt)) {}
+    std::cerr << write_ctr << ' ' << read_ctr << ' ' << std::endl;
+    while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
 
     check_out(read_ctr, write_ctr, trace_name);
 
