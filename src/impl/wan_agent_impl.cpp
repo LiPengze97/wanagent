@@ -361,13 +361,8 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         }
         return;
     }
-    std::tuple<uint64_t, site_id_t, Blob>& cur_obj = read_object_store[seq];
-    if ((version != uint64_t(-1) && (version > std::get<0>(cur_obj) || std::get<0>(cur_obj) == uint64_t(-1))) || std::get<0>(cur_obj) == 0) {
-        cur_obj = std::move(std::tuple<uint64_t, site_id_t, Blob>(version, site, obj));
-    }
     if (read_stability_frontier > seq) {
-        (*(read_callback_store[seq]))(std::get<0>(cur_obj), std::get<1>(cur_obj), std::move(std::get<2>(cur_obj)));
-        read_callback_store.erase(read_callback_store.find(seq));
+        (*(read_callback_store[seq]))(version, site, std::move(obj));
         disregards[seq] = 1;
     }
 }
@@ -742,6 +737,7 @@ void MessageSender::send_msg_loop() {
         if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second >= 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
+	    std::cout << buffer_list.size() << std::endl;
             size_mutex.lock();
             buffer_list.front().Destruct();
             buffer_list.pop_front();
