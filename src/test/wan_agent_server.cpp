@@ -54,8 +54,10 @@ int main(int argc, char** argv) {
 
     int ops_ctr = 0;
 
-    std::string obj = "";
-    for (int i = 0; i < 5000; ++i) obj += 'a';
+    char obj[100000];
+    for (int i = 0; i < 1000; ++i) obj[i] = 'a';
+    obj[1000] = '\0';
+    int len = 1000;
 
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader& RH, const char* msg) {
         // cout << "message received from site:" << RH.site_id
@@ -63,7 +65,6 @@ int main(int argc, char** argv) {
         //           << ", message version:" << RH.version
         //           << endl;
         if (RH.requestType == 1) {
-            all_lock.lock();
             //version_t prev_version = pblob.getLatestVersion();
             //version_t cur_version = prev_version + 1;
             // cerr << "cur_version = " << cur_version << endl;
@@ -75,13 +76,10 @@ int main(int argc, char** argv) {
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
             //max_version = RH.version;
             //pblob.persist(cur_version);
-            all_lock.unlock();
             return std::make_pair(RH.version, std::move(Blob("done", 4)));
         } else {
-            all_lock.lock();
             ++ops_ctr;
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
-            all_lock.unlock();
             //if (RH.version == (uint64_t)-1) {
             //    auto cur_version = max_version;
             //    all_lock.unlock();
@@ -93,7 +91,7 @@ int main(int argc, char** argv) {
             //uint64_t cur_version = seq_versions[RH.version];
             //all_lock.unlock();
             //return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
-	        return std::make_pair((uint64_t)0, std::move(Blob(obj.c_str(), obj.size())));
+	        return std::move(std::make_pair((uint64_t)0, std::move(Blob(obj, len))));
         }
     };
 

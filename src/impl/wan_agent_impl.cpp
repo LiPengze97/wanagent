@@ -363,7 +363,7 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
     }
     if (read_stability_frontier > seq) {
         if (seq % 5000 == 0) 
-            std::cerr << seq << ' ' << site << std::endl;
+            std::cerr << seq << ' ' << site << ' ' << read_callback_store.size() << std::endl;
         assert(read_callback_store[seq] != nullptr);
         (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
@@ -765,6 +765,7 @@ void MessageSender::read_msg_loop() {
         std::unique_lock<std::mutex> lock(read_mutex);
         read_not_empty.wait(lock, [this]() { return read_buffer_list.size() > 0; });
         int n = epoll_wait(epoll_fd_read_msg, events, EPOLL_MAXEVENTS, -1);
+        std::cout << "read all send seqno = " + R_last_all_sent_seqno + '\n';
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];
