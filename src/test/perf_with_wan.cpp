@@ -238,20 +238,20 @@ int main(int argc, char** argv) {
     string obj = "";
     for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
     int load_ctr = 0;
-    std::cerr << "Starting loading ..." << std::endl;
-    while (L_fin >> tmp) {
-        ++load_ctr;
-        if (load_ctr % 1000 == 0) cerr << load_ctr << endl;
+    // std::cerr << "Starting loading ..." << std::endl;
+    // while (L_fin >> tmp) {
+    //     ++load_ctr;
+    //     if (load_ctr % 1000 == 0) cerr << load_ctr << endl;
         
-        if (load_ctr == num_load) {
-            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[0].C);
-            while (!w_arrive_time[0]) {}
-        }
-        else {
-            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
-        }
-    }
-    std::cerr << "Load " << load_ctr << " operations" << std::endl;
+    //     if (load_ctr == num_load) {
+    //         wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[0].C);
+    //         while (!w_arrive_time[0]) {}
+    //     }
+    //     else {
+    //         wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
+    //     }
+    // }
+    // std::cerr << "Load " << load_ctr << " operations" << std::endl;
     std::cerr << "Press enter to start transactions" << std::endl;
     std::cin.get();
 
