@@ -444,7 +444,7 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                // std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
+                std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
@@ -459,7 +459,7 @@ void MessageSender::recv_read_ack_loop() {
                     throw std::runtime_error("failed receiving object for read request");
                 read_message_counters[res.site_id]++;
                 read_predicate_calculation();
-                // std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
+                std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
                 wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
             }
         }
