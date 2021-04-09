@@ -239,7 +239,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
     int load_ctr = 0;
     std::cerr << "Starting loading ..." << std::endl;
-    while (L_fin >> obj) {
+    while (L_fin >> tmp) {
         ++load_ctr;
         if (load_ctr % 1000 == 0) cerr << load_ctr << endl;
         
