@@ -41,7 +41,7 @@ static void print_help(const char* cmd) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
-#define MESSAGE_SIZE (8000)
+#define MESSAGE_SIZE (1000)
 
 const int MAXOPS = 1e5 + 100;
 
