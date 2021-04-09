@@ -79,11 +79,11 @@ inline void check_out(const int read_cnt, const int write_cnt) {
     uint64_t r_tot_wait_time = 0;
     uint64_t w_tot_wait_time = 0;
     for (int i = 1; i <= read_cnt; ++i) {
-        assert(r_arrive_time[i] > r_send_time[i]);
+        assert(r_arrive_time[i] >= r_send_time[i]);
         r_tot_wait_time += (r_arrive_time[i] - r_send_time[i]);
     }
     for (int i = 1; i <= write_cnt; ++i) {
-        assert(w_arrive_time[i] > w_send_time[i]);
+        assert(w_arrive_time[i] >= w_send_time[i]);
         w_tot_wait_time += (w_arrive_time[i] - w_send_time[i]);
     }
     long double r_mean_us = (long double)r_tot_wait_time/read_cnt;
