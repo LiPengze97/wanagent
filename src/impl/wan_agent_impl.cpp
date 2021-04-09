@@ -739,7 +739,6 @@ void MessageSender::send_msg_loop() {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
-            std::cerr << buffer_list.size() << std::endl;
             buffer_list.front().Destruct();
             buffer_list.pop_front();
             // list_lock.lock();
