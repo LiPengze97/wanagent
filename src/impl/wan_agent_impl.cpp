@@ -772,7 +772,9 @@ void MessageSender::read_msg_loop() {
                 auto requestType = node.message_type;
                 auto version = node.message_version;
                 auto curr_seqno = R_last_sent_seqno[site_id] + 1;
+                rcs.lock();
                 read_callback_store[curr_seqno] = node.RRC;
+                rcs.unlock();
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size) {
                     throw std::runtime_error("Something went wrong with read requests");
