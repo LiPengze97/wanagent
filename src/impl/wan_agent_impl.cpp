@@ -228,6 +228,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     success = sock_write(connected_sock_fd, version_obj.first);
                     if (!success)
                         throw std::runtime_error("Failed to send version");
+                    std::cerr << version_obj.second.size << std::endl;
                     success = sock_write(connected_sock_fd, version_obj.second.bytes, version_obj.second.size);
                     if (!success)
                         throw std::runtime_error("Failed to send all the bytes");
