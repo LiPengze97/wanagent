@@ -701,6 +701,7 @@ void MessageSender::send_msg_loop() {
                     // all messages on the buffer have been sent for this site_id
                     continue;
                 }
+                assert(buffer_list.size());
                 // auto pos = (offset + head) % n_slots;
                 auto node = buffer_list.front(); //!!!!! dangerous, a copy of char*
                 size_t payload_size = node.message_size;
