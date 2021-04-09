@@ -361,9 +361,11 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         return;
     }
     if (read_stability_frontier > seq) {
-        assert(read_callback_store[seq] != nullptr);
-        (*(read_callback_store[seq]))(version, site, std::move(obj));
+        rcs.lock();
+        if (read_callback_store[seq] != nullptr)
+            (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
+        rcs.unlock();
         disregards[seq] = 1;
     }
 }
@@ -390,10 +392,12 @@ void MessageSender::wait_write_predicate(const uint64_t seq) {
         return;
     }
     if (stability_frontier >= seq) {
+        wcs.lock();
         if (write_callback_store[seq] != nullptr) {
             (*(write_callback_store[seq]))();
         }
         write_callback_store.erase(write_callback_store.find(seq));
+        wcs.unlock();
         w_disregards[seq] = 1;
     }
 }
