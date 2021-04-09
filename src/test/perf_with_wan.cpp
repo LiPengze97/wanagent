@@ -209,6 +209,9 @@ int main(int argc, char** argv) {
     };
     wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
         r_arrive_time[++read_recv_cnt] = now_us();
+        if (read_recv_cnt % 1000 == 0) {
+            std::cerr << ";;; " << read_recv_cnt << std::endl;
+        }
     };
 
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);

@@ -717,9 +717,7 @@ void MessageSender::send_msg_loop() {
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = last_sent_seqno[site_id] + 1;
-                wcs.lock();
                 write_callback_store[curr_seqno] = node.WRC;
-                wcs.unlock();
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
@@ -782,9 +780,7 @@ void MessageSender::read_msg_loop() {
                 auto requestType = node.message_type;
                 auto version = node.message_version;
                 auto curr_seqno = R_last_sent_seqno[site_id] + 1;
-                rcs.lock();
                 read_callback_store[curr_seqno] = node.RRC;
-                rcs.unlock();
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size) {
                     throw std::runtime_error("Something went wrong with read requests");
