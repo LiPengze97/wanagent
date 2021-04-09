@@ -222,7 +222,6 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "write":"read") << " request\n";
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
                 if (header.requestType == 0) { // read request
@@ -362,8 +361,6 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         return;
     }
     if (read_stability_frontier > seq) {
-        if (seq % 5000 == 0) 
-            std::cerr << seq << ' ' << site << ' ' << read_callback_store.size() << std::endl;
         assert(read_callback_store[seq] != nullptr);
         (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
@@ -763,7 +760,6 @@ void MessageSender::read_msg_loop() {
         std::unique_lock<std::mutex> lock(read_mutex);
         read_not_empty.wait(lock, [this]() { return read_buffer_list.size() > 0; });
         int n = epoll_wait(epoll_fd_read_msg, events, EPOLL_MAXEVENTS, -1);
-        if (R_last_all_sent_seqno % 5000 == 0) std::cout << "read all send seqno = " + std::to_string(R_last_all_sent_seqno) + '\n';
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];
@@ -784,6 +780,8 @@ void MessageSender::read_msg_loop() {
                 R_last_sent_seqno[site_id] = curr_seqno;
             }
         }
+
+        std::cerr << "hiiiii " << R_last_all_sent_seqno << std::endl;
 
         auto it = std::min_element(R_last_sent_seqno.begin(), R_last_sent_seqno.end(),
                                    [](const auto& p1, const auto& p2) { 

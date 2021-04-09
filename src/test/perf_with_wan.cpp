@@ -87,8 +87,14 @@ inline void check_out(const int read_cnt, const int write_cnt, const string& tra
     w_std /= (long double)(write_cnt - 1);
     w_std = sqrt(w_std);
 
-    long double tot_dur = std::max(r_arrive_time[read_cnt], w_arrive_time[write_cnt])
-                        - std::min(w_send_time[1], r_send_time[1]);
+    uint64_t mx_time = 0;
+    if (read_cnt) mx_time = r_arrive_time[read_cnt];
+    if (write_cnt) mx_time = std::max(mx_time, w_arrive_time[write_cnt]);
+    uint64_t mn_time = (uint64_t)-1;
+    if (read_cnt) mn_time = r_send_time[1];
+    if (write_cnt) mn_time = std::min(mx_time, w_send_time[1]);
+
+    long double tot_dur = mx_time - mn_time;
     
     long double tot_bytes = MESSAGE_SIZE * 100000;
     long double tot_ops = 100000;
@@ -209,9 +215,6 @@ int main(int argc, char** argv) {
     };
     wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
         r_arrive_time[++read_recv_cnt] = now_us();
-        if (read_recv_cnt % 1000 == 0) {
-            std::cerr << ";;; " << read_recv_cnt << std::endl;
-        }
     };
 
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);
