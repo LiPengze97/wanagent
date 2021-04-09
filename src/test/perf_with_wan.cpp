@@ -41,6 +41,7 @@ static void print_help(const char* cmd) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
+#define MESSAGE_SIZE (5000)
 
 const int MAXOPS = 1e5 + 100;
 
@@ -109,7 +110,7 @@ inline void check_out(const int read_cnt, const int write_cnt, const string& tra
     long double tot_dur = std::max(r_arrive_time[read_cnt], w_arrive_time[write_cnt])
                         - std::min(w_send_time[1], r_send_time[1]);
     
-    long double tot_bytes = 1000.0 * 100000;
+    long double tot_bytes = MESSAGE_SIZE * 100000;
     long double tot_ops = 100000;
 
     long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
@@ -235,7 +236,7 @@ int main(int argc, char** argv) {
     std::ifstream T_fin(("../../../../"+trace_name+".trans").c_str());
     string tmp = "";
     string obj = "";
-    for (int i = 1; i <= 5000; ++i) obj += 'a';
+    for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
     int load_ctr = 0;
     std::cerr << "Starting loading ..." << std::endl;
     while (L_fin >> obj) {
