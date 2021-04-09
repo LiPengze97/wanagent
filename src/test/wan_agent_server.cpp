@@ -55,9 +55,9 @@ int main(int argc, char** argv) {
     int ops_ctr = 0;
 
     char obj[100000];
-    for (int i = 0; i < 1000; ++i) obj[i] = 'a';
-    obj[1000] = '\0';
-    int len = 1000;
+    for (int i = 0; i < 10; ++i) obj[i] = 'a';
+    obj[10] = '\0';
+    int len = 10;
 
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader& RH, const char* msg) {
         // cout << "message received from site:" << RH.site_id
