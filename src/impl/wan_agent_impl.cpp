@@ -713,7 +713,7 @@ void MessageSender::send_msg_loop() {
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = last_sent_seqno[site_id] + 1;
-                write_callback_store[curr_seqno] = node.WRC;
+                write_callback_store[version] = node.WRC;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
