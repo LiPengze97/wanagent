@@ -274,7 +274,7 @@ int main(int argc, char** argv) {
             T_fin >> version;
             ++read_ctr;
             r_send_time[read_ctr] = now_us();
-            wan_agent_sender.send_read_req(&rnodes[read_ctr].C, version);
+            wan_agent_sender.send_read_req(&rnodes[read_ctr].C);
         } else {
             T_fin >> tmp;
             ++write_ctr;
@@ -282,6 +282,7 @@ int main(int argc, char** argv) {
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[write_ctr].C);
         }
     }
+    std::cerr << write_ctr + read_ctr << std::endl;
     while ((write_ctr && !w_arrive_time[write_ctr]) || (read_ctr && !r_arrive_time[read_ctr])) {}
 
     check_out(read_ctr, write_ctr, trace_name);
