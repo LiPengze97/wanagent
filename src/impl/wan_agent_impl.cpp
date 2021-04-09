@@ -738,16 +738,15 @@ void MessageSender::send_msg_loop() {
         // log_debug("smallest seqno in last_sent_seqno is {}", it->second);
         // dequeue from ring buffer
         // || min_element == 0 will skip the comparison with static_cast<uint64_t>(-1)
-        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second >= 0)) {
+        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second == 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
-            buffer_list.front().Destruct();
             buffer_list.pop_front();
             // list_lock.lock();
             size_mutex.unlock();
             // list_lock.unlock();
-            last_all_sent_seqno = it->second; //*****!!!!
+            last_all_sent_seqno++;
         }
         lock.unlock();
     }
