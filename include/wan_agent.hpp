@@ -303,8 +303,6 @@ private:
     int nServer;
     uint64_t max_version = 0;
 
-    std::mutex rcs;
-    std::mutex wcs;
     std::map<uint64_t, ReadRecvCallback*> read_callback_store;
     std::map<uint64_t, WriteRecvCallback*> write_callback_store;
 

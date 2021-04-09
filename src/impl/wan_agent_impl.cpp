@@ -362,13 +362,11 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         return;
     }
     if (read_stability_frontier > seq) {
-        rcs.lock();
         if (seq % 5000 == 0) 
             std::cerr << seq << ' ' << site << ' ' << read_callback_store.size() << std::endl;
         assert(read_callback_store[seq] != nullptr);
         (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
-        rcs.unlock();
         disregards[seq] = 1;
     }
 }
@@ -395,12 +393,10 @@ void MessageSender::wait_write_predicate(const uint64_t seq) {
         return;
     }
     if (stability_frontier >= seq) {
-        wcs.lock();
         if (write_callback_store[seq] != nullptr) {
             (*(write_callback_store[seq]))();
         }
         write_callback_store.erase(write_callback_store.find(seq));
-        wcs.unlock();
         w_disregards[seq] = 1;
     }
 }
@@ -716,12 +712,12 @@ void MessageSender::send_msg_loop() {
                 auto version = node.message_version;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
-                auto curr_seqno = last_sent_seqno[site_id] + 1;
+                auto curr_seqno = version;
                 write_callback_store[curr_seqno] = node.WRC;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
+                sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
                 leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
@@ -768,6 +764,7 @@ void MessageSender::read_msg_loop() {
         std::unique_lock<std::mutex> lock(read_mutex);
         read_not_empty.wait(lock, [this]() { return read_buffer_list.size() > 0; });
         int n = epoll_wait(epoll_fd_read_msg, events, EPOLL_MAXEVENTS, -1);
+        if (R_last_all_sent_seqno % 5000 == 0) std::cout << "read all send seqno = " + std::to_string(R_last_all_sent_seqno) + '\n';
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];

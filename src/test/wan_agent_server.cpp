@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
             //max_version = RH.version;
             //pblob.persist(cur_version);
-            return std::make_pair(RH.seq, std::move(Blob("done", 4)));
+            return std::make_pair(RH.version, std::move(Blob("done", 4)));
         } else {
             ++ops_ctr;
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
