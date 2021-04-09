@@ -147,6 +147,7 @@ int main(int argc, char** argv) {
                 break;
             case 's':
                 SWI = static_cast<bool>(std::stoi(optarg));
+                break;
             default:
                 std::cerr << "please enter config and trace" << std::endl;
                 return -1;
