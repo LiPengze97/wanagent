@@ -718,12 +718,12 @@ void MessageSender::send_msg_loop() {
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = last_sent_seqno[site_id] + 1;
                 wcs.lock();
-                write_callback_store[version] = node.WRC;
+                write_callback_store[curr_seqno] = node.WRC;
                 wcs.unlock();
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
+                sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
                 leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();

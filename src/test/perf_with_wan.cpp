@@ -30,15 +30,6 @@ static inline int Rand(int L, int R) {
     return rand() % (R - L + 1) + L;
 }
 
-static void print_help(const char* cmd) {
-    std::cout << "Usage: " << cmd << " -c <json_config_file>"
-              << " [-s(sender)]"
-              << " [-i interval(micro)]"
-              << " [-m message_size(in bytes)]"
-              << " [-n number_of_messages]"
-              << std::endl;
-}
-
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
 #define MESSAGE_SIZE (1000)
@@ -53,17 +44,6 @@ uint64_t r_arrive_time[MAXOPS] = {0};
 
 uint64_t tot_read_ops = 0;
 uint64_t tot_write_ops = 0;
-
-struct W {
-    int seq;
-    wan_agent::WriteRecvCallback C;
-    W() {
-        C = [&]() {
-            w_arrive_time[seq] = now_us();
-        };
-    }
-    void set_seq(int _seq) { seq = _seq; }
-} wnodes[MAXOPS];
 
 struct R {
     int seq;
@@ -222,13 +202,17 @@ int main(int argc, char** argv) {
         }
     };
 
+    std::atomic<int> write_recv_cnt = 0;
+    std::atomic<int> read_recv_cnt = 0;
+    wan_agent::WriteRecvCallback WRC = [&]() {
+        w_arrive_time[++write_recv_cnt] = now_us();
+    };
+    wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
+        r_arrive_time[++read_recv_cnt] = now_us();
+    };
+
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);
 
-
-    for (int i = 0; i <= 100000; ++i) {
-        wnodes[i].set_seq(i);
-        rnodes[i].set_seq(i);
-    }
     std::cerr << "Press ENTER" << std::endl;
     std::cin.get();
 
@@ -237,21 +221,7 @@ int main(int argc, char** argv) {
     string tmp = "";
     string obj = "";
     for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
-    int load_ctr = 0;
-    // std::cerr << "Starting loading ..." << std::endl;
-    // while (L_fin >> tmp) {
-    //     ++load_ctr;
-    //     if (load_ctr % 1000 == 0) cerr << load_ctr << endl;
-        
-    //     if (load_ctr == num_load) {
-    //         wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[0].C);
-    //         while (!w_arrive_time[0]) {}
-    //     }
-    //     else {
-    //         wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
-    //     }
-    // }
-    // std::cerr << "Load " << load_ctr << " operations" << std::endl;
+
     std::cerr << "Press enter to start transactions" << std::endl;
     std::cin.get();
 
@@ -274,16 +244,15 @@ int main(int argc, char** argv) {
             T_fin >> version;
             ++read_ctr;
             r_send_time[read_ctr] = now_us();
-            wan_agent_sender.send_read_req(&rnodes[read_ctr].C);
+            wan_agent_sender.send_read_req(&RRC);
         } else {
             T_fin >> tmp;
             ++write_ctr;
             w_send_time[write_ctr] = now_us();
-            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[write_ctr].C);
+            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
         }
     }
-    std::cerr << write_ctr + read_ctr << std::endl;
-    while ((write_ctr && !w_arrive_time[write_ctr]) || (read_ctr && !r_arrive_time[read_ctr])) {}
+    while ((write_ctr != write_recv_cnt) || (read_ctr && read_recv_cnt)) {}
 
     check_out(read_ctr, write_ctr, trace_name);
 
