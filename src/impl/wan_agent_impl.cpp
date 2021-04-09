@@ -737,7 +737,6 @@ void MessageSender::send_msg_loop() {
         if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second >= 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
-	    std::cout << buffer_list.size() << std::endl;
             size_mutex.lock();
             buffer_list.front().Destruct();
             buffer_list.pop_front();

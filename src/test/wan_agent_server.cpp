@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
             //uint64_t cur_version = seq_versions[RH.version];
             //all_lock.unlock();
             //return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
-	    return std::make_pair((uint64_t)0, std::move(Blob(obj.c_str(), 1000)));
+	        return std::make_pair((uint64_t)0, std::move(Blob(obj.c_str(), 1000)));
         }
     };
 
