@@ -282,7 +282,7 @@ int main(int argc, char** argv) {
             wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &wnodes[write_ctr].C);
         }
     }
-    while (write_ctr && !w_arrive_time[write_ctr] || read_ctr && !r_arrive_time[read_ctr]) {}
+    while ((write_ctr && !w_arrive_time[write_ctr]) || (read_ctr && !r_arrive_time[read_ctr])) {}
 
     check_out(read_ctr, write_ctr, trace_name);
 
