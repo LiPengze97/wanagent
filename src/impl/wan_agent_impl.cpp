@@ -362,11 +362,13 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         return;
     }
     if (read_stability_frontier > seq) {
+        rcs.lock();
         if (seq % 5000 == 0) 
             std::cerr << seq << ' ' << site << ' ' << read_callback_store.size() << std::endl;
         assert(read_callback_store[seq] != nullptr);
         (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
+        rcs.unlock();
         disregards[seq] = 1;
     }
 }
@@ -393,10 +395,12 @@ void MessageSender::wait_write_predicate(const uint64_t seq) {
         return;
     }
     if (stability_frontier >= seq) {
+        wcs.lock();
         if (write_callback_store[seq] != nullptr) {
             (*(write_callback_store[seq]))();
         }
         write_callback_store.erase(write_callback_store.find(seq));
+        wcs.unlock();
         w_disregards[seq] = 1;
     }
 }
@@ -713,7 +717,9 @@ void MessageSender::send_msg_loop() {
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = last_sent_seqno[site_id] + 1;
+                wcs.lock();
                 write_callback_store[version] = node.WRC;
+                wcs.unlock();
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
@@ -776,7 +782,9 @@ void MessageSender::read_msg_loop() {
                 auto requestType = node.message_type;
                 auto version = node.message_version;
                 auto curr_seqno = R_last_sent_seqno[site_id] + 1;
+                rcs.lock();
                 read_callback_store[curr_seqno] = node.RRC;
+                rcs.unlock();
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size) {
                     throw std::runtime_error("Something went wrong with read requests");
