@@ -81,6 +81,7 @@ int main(int argc, char** argv) {
             all_lock.lock();
             ++ops_ctr;
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
+            all_lock.unlock();
             //if (RH.version == (uint64_t)-1) {
             //    auto cur_version = max_version;
             //    all_lock.unlock();
