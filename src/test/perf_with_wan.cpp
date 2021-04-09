@@ -41,7 +41,7 @@ static void print_help(const char* cmd) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
-#define MESSAGE_SIZE (5000)
+#define MESSAGE_SIZE (8000)
 
 const int MAXOPS = 1e5 + 100;
 
@@ -265,11 +265,11 @@ int main(int argc, char** argv) {
     while (T_fin >> ops) {
         ++trans_ctr;
         if (trans_ctr % 1000 == 0) cerr << trans_ctr << endl;
-        // now_time = now_us();
-        // while ((now_time - start_time)/1000000.0*expected_mps < (trans_ctr - 1)) {
-        //     std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
-        //     now_time = now_us();
-        // }
+        now_time = now_us();
+        while ((now_time - start_time)/1000000.0*expected_mps < (trans_ctr - 1)) {
+            std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+            now_time = now_us();
+        }
         if (ops[0] == 'R') {
             T_fin >> version;
             ++read_ctr;

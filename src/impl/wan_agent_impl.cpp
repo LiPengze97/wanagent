@@ -712,7 +712,7 @@ void MessageSender::send_msg_loop() {
                 auto version = node.message_version;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
-                auto curr_seqno = version;
+                auto curr_seqno = last_sent_seqno[site_id] + 1;
                 write_callback_store[curr_seqno] = node.WRC;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
@@ -764,7 +764,6 @@ void MessageSender::read_msg_loop() {
         std::unique_lock<std::mutex> lock(read_mutex);
         read_not_empty.wait(lock, [this]() { return read_buffer_list.size() > 0; });
         int n = epoll_wait(epoll_fd_read_msg, events, EPOLL_MAXEVENTS, -1);
-        if (R_last_all_sent_seqno % 5000 == 0) std::cout << "read all send seqno = " + std::to_string(R_last_all_sent_seqno) + '\n';
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];
