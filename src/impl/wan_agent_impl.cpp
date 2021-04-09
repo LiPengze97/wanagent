@@ -372,7 +372,6 @@ void MessageSender::trigger_read_callback(const uint64_t seq,
                                           const site_id_t site, 
                                           Blob&& obj) {
     read_recv_cnt[seq]++;
-    std::cout << write_recv_cnt[seq] << std::endl;
     (*(read_callback_store[seq]))(version, site, std::move(obj));
     if (read_recv_cnt[seq] == nServer) {
         read_recv_cnt.erase(read_recv_cnt.find(seq));
@@ -382,7 +381,6 @@ void MessageSender::trigger_read_callback(const uint64_t seq,
 
 void MessageSender::wait_write_predicate(const uint64_t seq) {
     write_recv_cnt[seq]++;
-    std::cout << write_recv_cnt[seq] << std::endl;
     if (w_disregards[seq]) {
         if (write_recv_cnt[seq] == nServer) {
             write_recv_cnt.erase(write_recv_cnt.find(seq));
