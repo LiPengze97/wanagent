@@ -248,12 +248,12 @@ int main(int argc, char** argv) {
         }
         if (ops[0] == 'R') {
             T_fin >> version;
-            ++write_ctr;
-            w_send_time[write_ctr] = now_us();
-            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
-            // ++read_ctr;
-            // r_send_time[read_ctr] = now_us();
-            // wan_agent_sender.send_read_req(&RRC);
+            // ++write_ctr;
+            // w_send_time[write_ctr] = now_us();
+            // wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
+            ++read_ctr;
+            r_send_time[read_ctr] = now_us();
+            wan_agent_sender.send_read_req(&RRC);
         } else {
             T_fin >> tmp;
             ++write_ctr;
