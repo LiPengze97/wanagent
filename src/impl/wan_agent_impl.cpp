@@ -449,7 +449,7 @@ void MessageSender::recv_read_ack_loop() {
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
                 }
-                //uint64_t cur_version;
+                uint64_t cur_version = 0;
                 //success = sock_read(events[i].data.fd, cur_version);
                 // if (!success)
                 //     throw std::runtime_error("Read Request: Failed receiving object version");
