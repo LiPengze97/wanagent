@@ -362,7 +362,8 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
         return;
     }
     if (read_stability_frontier > seq) {
-        std::cerr << seq << ' ' << site << std::endl;
+        if (seq % 5000 == 0) 
+            std::cerr << seq << ' ' << site << std::endl;
         (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
         disregards[seq] = 1;
