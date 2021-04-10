@@ -74,24 +74,20 @@ int main(int argc, char** argv) {
             // assert(max_version < RH.version);
             ++ops_ctr;
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
-            //max_version = RH.version;
-            //pblob.persist(cur_version);
+            max_version = RH.version;
+            pblob.persist(cur_version);
             return std::make_pair(RH.version, std::move(Blob("done", 4)));
         } else {
             ++ops_ctr;
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
-            //if (RH.version == (uint64_t)-1) {
-            //    auto cur_version = max_version;
-            //    all_lock.unlock();
-            //    return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
-            //} else if (seq_versions.find(RH.version) == seq_versions.end()) {
-            //    all_lock.unlock();
-            //    return std::make_pair((uint64_t)-1, std::move(Blob("OBJ_NOT_FOUND",13)));
-            ///}
-            //uint64_t cur_version = seq_versions[RH.version];
-            //all_lock.unlock();
-            //return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
-	        return std::move(std::make_pair((uint64_t)0, std::move(Blob(obj, len))));
+            if (RH.version == (uint64_t)-1) {
+               auto cur_version = max_version;
+               return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
+            } else if (seq_versions.find(RH.version) == seq_versions.end()) {
+               return std::make_pair((uint64_t)-1, std::move(Blob("OBJ_NOT_FOUND",13)));
+            }
+            uint64_t cur_version = seq_versions[RH.version];
+            return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
         }
     };
 

@@ -376,7 +376,7 @@ public:
     void sf_time_checker_loop();
     void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
     void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
-    void wait_write_predicate(const uint64_t seq);
+    void trigger_write_callback(const uint64_t seq);
     // void set_stability_frontier(int sf);
     void shutdown() {
         thread_shutdown.store(true);

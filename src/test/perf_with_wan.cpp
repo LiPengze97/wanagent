@@ -45,7 +45,7 @@ uint64_t tot_write_ops = 0;
 
 int MESSAGE_SIZE = 8000;
 
-inline void check_out(const int read_cnt, const int write_cnt, const string& trace) {
+inline void check_out(const int read_cnt, const int write_cnt, string pf) {
     uint64_t r_tot_wait_time = 0;
     uint64_t w_tot_wait_time = 0;
     for (int i = 1; i <= read_cnt; ++i) {
@@ -90,7 +90,8 @@ inline void check_out(const int read_cnt, const int write_cnt, const string& tra
 
     long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
     long double thp_ops = tot_ops * 1000000/tot_dur;
-    
+
+    std::cout << "--------- " << pf << " ---------" << std::endl;    
     std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
     std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
     std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
@@ -100,7 +101,7 @@ inline void check_out(const int read_cnt, const int write_cnt, const string& tra
     std::cout << "Std of read latency = " << r_std << endl;
     std::cout << "Std of write latency = " << w_std << endl;
 
-    freopen((trace+".log").c_str(), "w", stdout);
+    freopen((pf+".log").c_str(), "w", stdout);
     std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
     std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
     std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
@@ -115,31 +116,28 @@ int main(int argc, char** argv) {
     srand(time(0));
     int opt;
     std::string json_config;
-    std::string trace_name = "";
 
     int num_load = 0;
     int expected_mps = 200;
     bool SWI  = 0;
+    int n_message = 0;
     
-    while((opt = getopt(argc, argv, "c:t:n:p:s:m:")) != -1) {
+    while((opt = getopt(argc, argv, "c:n:p:s:m:")) != -1) {
         switch(opt) {
             case 'c':
                 json_config = optarg;
                 break;
-            case 't':
-                trace_name = optarg;
-                break;
             case 'n':
-                num_load = static_cast<int>(std::stoi(optarg));
+                n_message = static_cast<int>(std::stoi(optarg));
                 break;
             case 'p':
                 expected_mps = static_cast<int>(std::stoi(optarg));
                 break;
-            case 's':
-                SWI = static_cast<bool>(std::stoi(optarg));
-                break;
             case 'm':
                 MESSAGE_SIZE = static_cast<int>(std::stoi(optarg));
+                break;
+            case 's':
+                SWI = static_cast<bool>(std::stoi(optarg));
                 break;
             default:
                 std::cerr << "please enter config and trace" << std::endl;
@@ -152,8 +150,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    int number_of_messages = 100000;
-
     std::ifstream json_file(json_config);
     nlohmann::json conf;
     json_file >> conf;
@@ -161,14 +157,12 @@ int main(int argc, char** argv) {
     uint64_t* time_keeper = nullptr;
     std::atomic<bool> all_received(false);
 
-    std::cerr << "trace name = " << trace_name << std::endl;
-
-    time_keeper = static_cast<uint64_t*>(malloc(sizeof(uint64_t) * 4 * number_of_messages));
+    time_keeper = static_cast<uint64_t*>(malloc(sizeof(uint64_t) * 4 * n_message));
     if(time_keeper == nullptr) {
         throw std::runtime_error("failed to allocate memory for time keeper");
     } else {
         // touch the memory
-        bzero(static_cast<void*>(time_keeper), sizeof(uint64_t) * 4 * number_of_messages);
+        bzero(static_cast<void*>(time_keeper), sizeof(uint64_t) * 4 * n_message);
     }
 
     wan_agent::PredicateLambda pl = [&](const std::map<uint32_t, uint64_t>& table) {
@@ -200,51 +194,77 @@ int main(int argc, char** argv) {
                 max--;
             }
         }
-        if(time_keeper[number_of_messages * 4 - 1] != 0) {
+        if(time_keeper[n_message * 4 - 1] != 0) {
             all_received.store(true);
         }
     };
-
-    std::atomic<int> write_recv_cnt = 0;
-    std::atomic<int> read_recv_cnt = 0;
-    wan_agent::WriteRecvCallback WRC = [&]() {
-        w_arrive_time[++write_recv_cnt] = now_us();
-    };
-    wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
-        r_arrive_time[++read_recv_cnt] = now_us();
-    };
-
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);
 
-    std::cerr << "Press ENTER" << std::endl;
-    std::cin.get();
-
-    std::ifstream L_fin(("../../../../"+trace_name+".load").c_str());
-    std::ifstream T_fin(("../../../../"+trace_name+".trans").c_str());
-    string tmp = "";
     string obj = "";
     for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
 
-    std::cerr << "Press enter to start transactions" << std::endl;
+    std::string w_pr[5] = {
+        "MIN($1,$2,$3,$4)",
+        "MAX($1,$2,$3,$4)",
+        "KTH_MIN($3,$1,$2,$3,$4)"
+        "KTH_MIN($2,MAX($1,$2),$3,$4)"
+        "MAX(MIN($1,$2),$3,$4)"
+    };
+
+    std::string w_name[5] = {
+        "w_all",
+        "w_sig",
+        "w_maj",
+        "w_maj_reg",
+        "w_sig_reg"
+    };
+
+    std::string r_pr[5] = {
+        "MIN($1,$2,$3,$4)",
+        "MAX($1,$2,$3,$4)",
+        "KTH_MIN($2,$1,$2,$3,$4)"
+        "KTH_MIN($2,MIN($1,$2),$3,$4)"
+        "MIN(MAX($1,$2),$3,$4)"
+    }
+
+    std::string r_name[5] = {
+        "r_sig",
+        "r_all",
+        "r_maj",
+        "r_maj_reg",
+        "r_sig_reg"
+    };
+
+    if (!SWI) {
+        wan_agent_sender.send_write_seq(obj.c_str(), obj.size(), nullptr);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    std::cerr << "Press ENTER to Start Testing" << std::endl;
     std::cin.get();
 
-    string ops = "";
-    uint64_t version = uint64_t(-1);
-
-    int read_ctr = 0, write_ctr = 0;
-    int trans_ctr = 0;
-    uint64_t start_time = now_us();
-    uint64_t now_time;
-    while (T_fin >> ops) {
-        ++trans_ctr;
-        if (trans_ctr % 1000 == 0) cerr << trans_ctr << endl;
-        now_time = now_us();
-        while ((now_time - start_time)/1000000.0*expected_mps < (trans_ctr - 1)) {
-            std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+    for (int T = 0; T < 5; ++T) {
+        std::atomic<int> write_recv_cnt = 0;
+        std::atomic<int> read_recv_cnt = 0;
+        wan_agent::WriteRecvCallback WRC = [&]() {
+            w_arrive_time[++write_recv_cnt] = now_us();
+        };
+        wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
+            r_arrive_time[++read_recv_cnt] = now_us();
+        };
+        std::cerr << "TESTING on predicate :" << (SWI ? w_name[i] : r_name[i]) << std::endl;
+        wan_agent_sender.submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[i] : r_pr[i], 1);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        int read_ctr = 0, write_ctr = 0;
+        uint64_t start_time = now_us();
+        uint64_t now_time;
+        for (int i = 1; i <= n_message; ++i) {
+            if (i % 1000 == 0) cerr << i << endl;
             now_time = now_us();
-        }
-        if (ops[0] == 'R') {
-            T_fin >> version;
+            while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
+                std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+                now_time = now_us();
+            }
             if (SWI) {
                 ++write_ctr;
                 w_send_time[write_ctr] = now_us();
@@ -254,17 +274,11 @@ int main(int argc, char** argv) {
                 r_send_time[read_ctr] = now_us();
                 wan_agent_sender.send_read_req(&RRC);
             }
-        } else {
-            T_fin >> tmp;
-            ++write_ctr;
-            w_send_time[write_ctr] = now_us();
-            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
         }
+        std::cerr << write_ctr << ' ' << read_ctr << ' ' << std::endl;
+        while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
+        check_out(read_ctr, write_ctr, SWI ? w_name[i] : r_name[i]);
     }
-    std::cerr << write_ctr << ' ' << read_ctr << ' ' << std::endl;
-    while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
-
-    check_out(read_ctr, write_ctr, trace_name);
 
     std::cerr << "Press ENTER to kill." << std::endl;
     std::cin.get();

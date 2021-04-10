@@ -362,9 +362,10 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
     }
     if (read_stability_frontier > seq) {
         rcs.lock();
-        if (read_callback_store[seq] != nullptr)
+        if (read_callback_store[seq] != nullptr) {
             (*(read_callback_store[seq]))(version, site, std::move(obj));
-        read_callback_store.erase(read_callback_store.find(seq));
+            read_callback_store.erase(read_callback_store.find(seq));
+        }
         rcs.unlock();
         disregards[seq] = 1;
     }
@@ -374,32 +375,21 @@ void MessageSender::trigger_read_callback(const uint64_t seq,
                                           const uint64_t version, 
                                           const site_id_t site, 
                                           Blob&& obj) {
-    read_recv_cnt[seq]++;
-    (*(read_callback_store[seq]))(version, site, std::move(obj));
-    if (read_recv_cnt[seq] == nServer) {
-        read_recv_cnt.erase(read_recv_cnt.find(seq));
+    rcs.lock();
+    if (read_callback_store[seq] != nullptr) {
+        (*(read_callback_store[seq]))(version, site, std::move(obj));
         read_callback_store.erase(read_callback_store.find(seq));
     }
+    rcs.unlock();
 }
 
-void MessageSender::wait_write_predicate(const uint64_t seq) {
-    write_recv_cnt[seq]++;
-    if (w_disregards[seq]) {
-        if (write_recv_cnt[seq] == nServer) {
-            write_recv_cnt.erase(write_recv_cnt.find(seq));
-            w_disregards.erase(w_disregards.find(seq));
-        }
-        return;
-    }
-    if (stability_frontier >= seq) {
-        wcs.lock();
-        if (write_callback_store[seq] != nullptr) {
-            (*(write_callback_store[seq]))();
-        }
+void MessageSender::trigger_write_callback(const uint64_t seq) {
+    wcs.lock();
+    if (write_callback_store[seq] != nullptr) {
+        (*(write_callback_store[seq]))();
         write_callback_store.erase(write_callback_store.find(seq));
-        wcs.unlock();
-        w_disregards[seq] = 1;
     }
+    wcs.unlock();
 }
 
 void MessageSender::recv_ack_loop() {
@@ -420,10 +410,12 @@ void MessageSender::recv_ack_loop() {
                 // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';
                 message_counters[res.site_id]++;
                 uint64_t pre_cal_st_time = get_time_us();
+                auto pr_sf = stability_frontier;
                 predicate_calculation();
                 // std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
-                wait_write_predicate(res.seq);
-                transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
+                if (stability_frontier > pr_sf)
+                    trigger_write_callback(res.seq);
+                // transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 // if(res.seq == wait_target_sf) {
                 //     ack_keeper[res.site_id - 1000] = get_time_us();
                 // }
@@ -462,9 +454,11 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success)
                     throw std::runtime_error("failed receiving object for read request");
                 read_message_counters[res.site_id]++;
+                auto pr_sf = read_stability_frontier;
                 read_predicate_calculation();
                 // std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
-                wait_read_predicate(res.seq, cur_version, res.site_id, std::move(cur_obj));
+                if (read_stability_frontier > pr_st)
+                    trigger_read_callback(res.seq, cur_version, res.site_id, std::move(cur_obj));
             }
         }
     }
@@ -531,7 +525,7 @@ void MessageSender::predicate_calculation() {
 
     //     predicate_idx--;
     // }
-    stability_frontier_arrive_cv.notify_one();
+    // stability_frontier_arrive_cv.notify_one();
 
     /**comparation with gccjit and none gccjit**/
     // uint64_t sf_cal_st_time = get_time_us();
@@ -869,9 +863,15 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     std::istringstream iss(predicate_str);
     predicate_generator = new Predicate_Generator(iss);
     predicate_fn_type prl = predicate_generator->get_predicate_function();
+    auto inverse_predicate_str = reverser::get_inverse_predicate(predicate_str);
+    std::istringstream i_iss(inverse_predicate_str);
+    predicate_fn_type iprl = inverse_predicate_generator->get_predicate_function();
     if(inplace) {
+        std::cerr << predicate_str << ' ' << inverse_predicate_str << std::endl;
         predicate = prl;
         message_sender->predicate = predicate;
+        inverse_predicate = iprl;
+        message_sender->inverse_predicate = inverse_predicate;
     }
     predicate_map[key] = prl;
     message_sender->predicate_map[key] = prl;
