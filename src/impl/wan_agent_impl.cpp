@@ -372,34 +372,13 @@ void MessageSender::wait_read_predicate(const uint64_t seq,
     }
 }
 
-void MessageSender::trigger_read_callback(const uint64_t seq, 
-                                          const uint64_t version, 
-                                          const site_id_t site, 
-                                          Blob&& obj) {
-    read_recv_cnt[seq]++;
-    (*(read_callback_store[seq]))(version, site, std::move(obj));
-    if (read_recv_cnt[seq] == nServer) {
-        read_recv_cnt.erase(read_recv_cnt.find(seq));
-        read_callback_store.erase(read_callback_store.find(seq));
-    }
-}
-
-void MessageSender::wait_write_predicate(const uint64_t seq) {
-    write_recv_cnt[seq]++;
-    if (w_disregards[seq]) {
-        if (write_recv_cnt[seq] == nServer) {
-            write_recv_cnt.erase(write_recv_cnt.find(seq));
-            w_disregards.erase(w_disregards.find(seq));
-        }
-        return;
-    }
-    if (stability_frontier >= seq) {
-        if (write_callback_store[seq] != nullptr) {
-            (*(write_callback_store[seq]))();
-        }
+void MessageSender::trigger_write_callback(const uint64_t seq) {
+    wcs.lock();
+    if (write_callback_store[seq] != nullptr) {
+        (*(write_callback_store[seq]))();
         write_callback_store.erase(write_callback_store.find(seq));
-        w_disregards[seq] = 1;
     }
+    wcs.unlock();
 }
 
 void MessageSender::recv_ack_loop() {
@@ -420,9 +399,10 @@ void MessageSender::recv_ack_loop() {
                 // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';
                 message_counters[res.site_id]++;
                 uint64_t pre_cal_st_time = get_time_us();
+                auto pr_sf = stability_frontier;
                 predicate_calculation();
-                // std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
-                wait_write_predicate(res.seq);
+                if (stability_frontier > pr_sf)
+                    trigger_write_callback(res.seq);
                 transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 // if(res.seq == wait_target_sf) {
                 //     ack_keeper[res.site_id - 1000] = get_time_us();
@@ -660,7 +640,6 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
     }
     
     buffer_list.push_back(std::move(*tmp));
-    delete tmp;
     enter_queue_time_keeper[msg_idx++] = get_time_us();
     size_mutex.unlock();
     not_empty.notify_one();
@@ -681,7 +660,6 @@ void MessageSender::read_enqueue(const uint64_t& version, ReadRecvCallback* RRC)
     // enter_queue_time_keeper[msg_idx++] = get_time_us();
     read_size_mutex.unlock();
     read_not_empty.notify_one();
-    delete tmp;
 }
 
 void MessageSender::send_msg_loop() {
@@ -702,27 +680,43 @@ void MessageSender::send_msg_loop() {
                 site_id_t site_id = sockfd_to_server_site_id_map[events[i].data.fd];
                 // log_trace("send buffer is available for site {}.", site_id);
                 auto offset = last_sent_seqno[site_id] - last_all_sent_seqno;
-                if(offset == buffer_list.size()) {
-                    // all messages on the buffer have been sent for this site_id
-                    continue;
-                }
-                // auto pos = (offset + head) % n_slots;
-                auto node = buffer_list.front(); //!!!!! dangerous, a copy of char*
+
+                /* This operation will cause wrong data transfer
+                 * because it assumes that every message have the 
+                 * same content. It will also conflicts the version
+                 * of each message. But this works well for testing.
+                 * Change the buffer_list to a fixed-size ring buffer
+                 * may help solve the problem. Since one can use 
+                 * last_sent_seqno[] to access elements
+                 */
+                // if(offset == buffer_list.size()) {
+                //     continue;
+                // }
+                ///////////////////////////////////////////////////
+
+                /* This will guarentee a correct result by
+                 * sending message synchronously.
+                 */ 
+                if (offset) continue;
+                ///////////////////////////////////////////////////
+
+                auto node = buffer_list.front();
                 size_t payload_size = node.message_size;
                 auto requestType = node.message_type;
                 auto version = node.message_version;
-                if (last_sent_seqno[site_id] != uint64_t(-1) && last_sent_seqno[site_id] >= version) continue;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
-                auto curr_seqno = version;
+                auto curr_seqno = last_sent_seqno[site_id] + 1;
+                wcs.lock();
                 write_callback_store[curr_seqno] = node.WRC;
+                wcs.unlock();
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
+                sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
-                leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
+//                leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
                 // buffer_size[curr_seqno] = size;
 
                 last_sent_seqno[site_id] = curr_seqno;
@@ -740,16 +734,15 @@ void MessageSender::send_msg_loop() {
         // log_debug("smallest seqno in last_sent_seqno is {}", it->second);
         // dequeue from ring buffer
         // || min_element == 0 will skip the comparison with static_cast<uint64_t>(-1)
-        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second >= 0)) {
+        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second == 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
-            buffer_list.front().Destruct();
             buffer_list.pop_front();
             // list_lock.lock();
             size_mutex.unlock();
             // list_lock.unlock();
-            last_all_sent_seqno = it->second; //*****!!!!
+            last_all_sent_seqno++;
         }
         lock.unlock();
     }
@@ -770,15 +763,29 @@ void MessageSender::read_msg_loop() {
             if(events[i].events & EPOLLOUT) {
                 site_id_t site_id = R_sockfd_to_server_site_id_map[events[i].data.fd];
                 auto offset = R_last_sent_seqno[site_id] - R_last_all_sent_seqno;
-                if(offset == read_buffer_list.size()) {
-                    continue;
-                }
+
+                /* This operation will cause wrong data transfer
+                 * because it assumes that every message have the 
+                 * same content. It will also conflicts the version
+                 * of each message. But this works well for testing.
+                 * By changing buffer_list to a fixed-size ring buffer
+                 * may help solve the problem.
+                 */
+                // if(offset == buffer_list.size()) {
+                //     continue;
+                // }
+                ///////////////////////////////////////////////////
+
+                if (offset) continue;
+
                 auto node = read_buffer_list.front();
                 size_t payload_size = node.message_size;
                 auto requestType = node.message_type;
                 auto version = node.message_version;
                 auto curr_seqno = R_last_sent_seqno[site_id] + 1;
+                rcs.lock();
                 read_callback_store[curr_seqno] = node.RRC;
+                rcs.unlock();
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size) {
                     throw std::runtime_error("Something went wrong with read requests");
@@ -864,9 +871,15 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     std::istringstream iss(predicate_str);
     predicate_generator = new Predicate_Generator(iss);
     predicate_fn_type prl = predicate_generator->get_predicate_function();
+    auto inverse_predicate_str = reverser::get_inverse_predicate(predicate_str);
+    std::istringstream i_iss(inverse_predicate_str);
+    inverse_predicate_generator = new Predicate_Generator(i_iss);
+    predicate_fn_type iprl = inverse_predicate_generator->get_predicate_function();
     if(inplace) {
         predicate = prl;
         message_sender->predicate = predicate;
+        inverse_predicate = iprl;
+        message_sender->inverse_predicate = inverse_predicate;
     }
     predicate_map[key] = prl;
     message_sender->predicate_map[key] = prl;

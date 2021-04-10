@@ -244,12 +244,6 @@ struct LinkedBufferNode {
     // LinkedBufferNode* next;
 
     LinkedBufferNode() {}
-    void Destruct() {
-        if (message_body != nullptr) {
-            delete[] message_body;
-            message_body = nullptr;
-        }
-    }
 };
 
 // the Client worker
@@ -303,6 +297,8 @@ private:
     int nServer;
     uint64_t max_version = 0;
 
+    std::mutex wcs;
+    std::mutex rcs;
     std::map<uint64_t, ReadRecvCallback*> read_callback_store;
     std::map<uint64_t, WriteRecvCallback*> write_callback_store;
 
@@ -373,8 +369,7 @@ public:
     void wait_stability_frontier_loop(int sf);
     void sf_time_checker_loop();
     void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
-    void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob&& obj);
-    void wait_write_predicate(const uint64_t seq);
+    void trigger_write_callback(const uint64_t seq);
     // void set_stability_frontier(int sf);
     void shutdown() {
         thread_shutdown.store(true);
