@@ -91,15 +91,15 @@ inline void check_out(const int read_cnt, const int write_cnt, string pf) {
     long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
     long double thp_ops = tot_ops * 1000000/tot_dur;
 
-    std::cout << "--------- " << pf << " ---------" << std::endl;    
-    std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
-    std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
-    std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
+    std::cerr << "--------- " << pf << " ---------" << std::endl;    
+    std::cerr << "Throughput (MiB/s): " << thp_mibps << std::endl;
+    std::cerr << "Throughput (Ops/s): " << thp_ops << std::endl;
+    std::cerr << "Average Read Latency = " << r_mean_us << "(us) " 
               << r_mean_ms << "(ms)" << endl;
-    std::cout << "Average Write Latency = " << w_mean_us << "(us) " 
+    std::cerr << "Average Write Latency = " << w_mean_us << "(us) " 
               << w_mean_ms << "(ms)" << endl;
-    std::cout << "Std of read latency = " << r_std << endl;
-    std::cout << "Std of write latency = " << w_std << endl;
+    std::cerr << "Std of read latency = " << r_std << endl;
+    std::cerr << "Std of write latency = " << w_std << endl;
 
     freopen((pf+".log").c_str(), "w", stdout);
     std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
