@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
     int expected_mps = 200;
     bool SWI  = 0;
     
-    while((opt = getopt(argc, argv, "c:t:n:p:s:")) != -1) {
+    while((opt = getopt(argc, argv, "c:t:n:p:s:m:")) != -1) {
         switch(opt) {
             case 'c':
                 json_config = optarg;
