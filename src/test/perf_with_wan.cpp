@@ -46,7 +46,7 @@ uint64_t tot_write_ops = 0;
 int MESSAGE_SIZE = 8000;
 int n_message = 0;
 
-inline void check_out(const int read_cnt, const int write_cnt, string pf) {
+inline void check_out(const int read_cnt, const int write_cnt, string pf, bool SWI) {
     uint64_t r_tot_wait_time = 0;
     uint64_t w_tot_wait_time = 0;
     for (int i = 1; i <= read_cnt; ++i) {
@@ -101,17 +101,12 @@ inline void check_out(const int read_cnt, const int write_cnt, string pf) {
               << w_mean_ms << "(ms)" << endl;
     std::cerr << "Std of read latency = " << r_std << endl;
     std::cerr << "Std of write latency = " << w_std << endl;
-
-    freopen((pf+".log").c_str(), "w", stdout);
-    std::cout << "Throughput (MiB/s): " << thp_mibps << std::endl;
-    std::cout << "Throughput (Ops/s): " << thp_ops << std::endl;
-    std::cout << "Average Read Latency = " << r_mean_us << "(us) " 
-              << r_mean_ms << "(ms)" << endl;
-    std::cout << "Average Write Latency = " << w_mean_us << "(us) " 
-              << w_mean_ms << "(ms)" << endl;
-    std::cout << "Std of read latency = " << r_std << endl;
-    std::cout << "Std of write latency = " << w_std << endl;
-    fclose(stdout);
+    if (SWI) {
+        std::cout << thp_mibps;
+    }
+    else {
+        std::cout << r_mean_us;
+    }
 }
 
 int main(int argc, char** argv) {
@@ -230,48 +225,61 @@ int main(int argc, char** argv) {
         "r_maj",
         "r_maj_reg",
     };
+    for (SWI = 0; SWI <= 1; ++SWI) {
+        std::cerr << "TESTING ON " << (SWI ? "WRITE" : "READ") << std::endl;
+        if (!SWI) {
+            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
 
-    if (!SWI) {
-        wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+        if (SWI) freopen("write.log", "w", stdout);
+        else freopen("read.log", "w", stdout);
 
-    for (int T = 0; T < 4; ++T) {
-        std::atomic<int> write_recv_cnt = 0;
-        std::atomic<int> read_recv_cnt = 0;
-        wan_agent::WriteRecvCallback WRC = [&]() {
-            w_arrive_time[++write_recv_cnt] = now_us();
-        };
-        wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
-            r_arrive_time[++read_recv_cnt] = now_us();
-        };
-        std::cerr << "TESTING on predicate :" << (SWI ? w_name[T] : r_name[T]) << std::endl;
-        wan_agent_sender.submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[T] : r_pr[T], 1);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        int read_ctr = 0, write_ctr = 0;
-        uint64_t start_time = now_us();
-        uint64_t now_time;
-        for (int i = 1; i <= n_message; ++i) {
-            if (i % 1000 == 0) cerr << i << endl;
-            now_time = now_us();
-            while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
-                std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
-                now_time = now_us();
-            }
-            if (SWI) {
-                ++write_ctr;
-                w_send_time[write_ctr] = now_us();
-                wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
-            } else {
-                ++read_ctr;
-                r_send_time[read_ctr] = now_us();
-                wan_agent_sender.send_read_req(&RRC);
+        for (int T = 0; T < 4; ++T) {
+            std::cerr << "TEST CASE = " << T << std::endl;
+            int st = (SWI ? 2000 : 500);
+            int ed = (SWI ? 10000 : 1100);
+            int dt = (SWI ? 2000 : 200);
+            for (int parm = st; parm <= ed; parm += dt) {
+                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 6000);
+                (SWI ? expected_mps = (int)1e7 : expected_mps = parm);
+                std::atomic<int> write_recv_cnt = 0;
+                std::atomic<int> read_recv_cnt = 0;
+                wan_agent::WriteRecvCallback WRC = [&]() {
+                    w_arrive_time[++write_recv_cnt] = now_us();
+                };
+                wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
+                    r_arrive_time[++read_recv_cnt] = now_us();
+                };
+                std::cerr << "TESTING on predicate :" << (SWI ? w_name[T] : r_name[T]) << std::endl;
+                wan_agent_sender.submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[T] : r_pr[T], 1);
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                int read_ctr = 0, write_ctr = 0;
+                uint64_t start_time = now_us();
+                uint64_t now_time;
+                for (int i = 1; i <= n_message; ++i) {
+                    if (i % 5000 == 0) cerr << i << endl;
+                    now_time = now_us();
+                    while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
+                        std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+                        now_time = now_us();
+                    }
+                    if (SWI) {
+                        ++write_ctr;
+                        w_send_time[write_ctr] = now_us();
+                        wan_agent_sender.send_write_req(obj.c_str(), obj.size(), &WRC);
+                    } else {
+                        ++read_ctr;
+                        r_send_time[read_ctr] = now_us();
+                        wan_agent_sender.send_read_req(&RRC);
+                    }
+                }
+                while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
+                check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T], SWI);
+                wan_agent_sender.wait();
             }
         }
-        std::cerr << write_ctr << ' ' << read_ctr << ' ' << std::endl;
-        while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
-        check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T]);
-        wan_agent_sender.wait();
+        fclose(stdout);
     }
 //    std::cerr << "hi" << std::endl;
 //    std::this_thread::sleep_for(std::chrono::seconds(1));
