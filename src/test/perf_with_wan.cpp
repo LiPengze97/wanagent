@@ -225,7 +225,7 @@ int main(int argc, char** argv) {
         "KTH_MIN($2,$1,$2,$3,$4)"
         "KTH_MIN($2,MIN($1,$2),$3,$4)"
         "MIN(MAX($1,$2),$3,$4)"
-    }
+    };
 
     std::string r_name[5] = {
         "r_sig",
@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
     };
 
     if (!SWI) {
-        wan_agent_sender.send_write_seq(obj.c_str(), obj.size(), nullptr);
+        wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     
@@ -252,8 +252,8 @@ int main(int argc, char** argv) {
         wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
             r_arrive_time[++read_recv_cnt] = now_us();
         };
-        std::cerr << "TESTING on predicate :" << (SWI ? w_name[i] : r_name[i]) << std::endl;
-        wan_agent_sender.submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[i] : r_pr[i], 1);
+        std::cerr << "TESTING on predicate :" << (SWI ? w_name[T] : r_name[T]) << std::endl;
+        wan_agent_sender.submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[T] : r_pr[T], 1);
         std::this_thread::sleep_for(std::chrono::seconds(1));
         int read_ctr = 0, write_ctr = 0;
         uint64_t start_time = now_us();
