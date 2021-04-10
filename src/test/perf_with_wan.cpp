@@ -82,7 +82,7 @@ inline void check_out(const int read_cnt, const int write_cnt, string pf, int SW
     if (write_cnt) mx_time = std::max(mx_time, w_arrive_time[write_cnt]);
     uint64_t mn_time = (uint64_t)-1;
     if (read_cnt) mn_time = r_send_time[1];
-    if (write_cnt) mn_time = std::min(mx_time, w_send_time[1]);
+    if (write_cnt) mn_time = std::min(mn_time, w_send_time[1]);
 
     long double tot_dur = mx_time - mn_time;
     
@@ -234,18 +234,16 @@ int main(int argc, char** argv) {
 
         if (SWI) freopen("write.log", "w", stdout);
         else freopen("read.log", "w", stdout);
-        if (SWI) n_message = 50000;
-        else n_message = 20000;
-
+        
         for (int T = 0; T < 4; ++T) {
             std::cerr << "TEST CASE = " << T << std::endl;
-            int st = (SWI ? 2000 : 400);
-            int ed = (SWI ? 10000 : 800);
-            int dt = (SWI ? 2000 : 100);
+            int st = (SWI ? 2000 : 900);
+            int ed = (SWI ? 10000 : 2700);
+            int dt = (SWI ? 2000 : 600);
             std::cout << T << ' ';
             for (int parm = st; parm <= ed; parm += dt) {
-                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 8000);
-                (SWI ? expected_mps = (int)1e7 : expected_mps = parm);
+                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
+                (SWI ? expected_mps = (int)1e6 : expected_mps = parm);
                 std::atomic<int> write_recv_cnt = 0;
                 std::atomic<int> read_recv_cnt = 0;
                 wan_agent::WriteRecvCallback WRC = [&]() {
