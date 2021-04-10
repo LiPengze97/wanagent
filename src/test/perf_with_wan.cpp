@@ -44,6 +44,7 @@ uint64_t tot_read_ops = 0;
 uint64_t tot_write_ops = 0;
 
 int MESSAGE_SIZE = 8000;
+int n_message = 0;
 
 inline void check_out(const int read_cnt, const int write_cnt, string pf) {
     uint64_t r_tot_wait_time = 0;
@@ -85,7 +86,7 @@ inline void check_out(const int read_cnt, const int write_cnt, string pf) {
 
     long double tot_dur = mx_time - mn_time;
     
-    long double tot_bytes = MESSAGE_SIZE * 100000;
+    long double tot_bytes = MESSAGE_SIZE * n_message;
     long double tot_ops = 100000;
 
     long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
@@ -118,10 +119,8 @@ int main(int argc, char** argv) {
     int opt;
     std::string json_config;
 
-    int num_load = 0;
     int expected_mps = 200;
     bool SWI  = 0;
-    int n_message = 0;
     
     while((opt = getopt(argc, argv, "c:n:p:s:m:")) != -1) {
         switch(opt) {
