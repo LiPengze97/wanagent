@@ -204,36 +204,32 @@ int main(int argc, char** argv) {
     string obj = "";
     for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
 
-    std::string w_pr[5] = {
+    std::string w_pr[4] = {
         "MIN($1,$2,$3,$4)",
         "MAX($1,$2,$3,$4)",
         "KTH_MIN($3,$1,$2,$3,$4)",
         "KTH_MIN($2,MAX($1,$2),$3,$4)",
-        "MAX(MIN($1,$2),$3,$4)"
     };
 
-    std::string w_name[5] = {
+    std::string w_name[4] = {
         "w_all",
         "w_sig",
         "w_maj",
         "w_maj_reg",
-        "w_sig_reg"
     };
 
-    std::string r_pr[5] = {
+    std::string r_pr[4] = {
         "MIN($1,$2,$3,$4)",
         "MAX($1,$2,$3,$4)",
         "KTH_MIN($2,$1,$2,$3,$4)",
         "KTH_MIN($2,MIN($1,$2),$3,$4)",
-        "MIN(MAX($1,$2),$3,$4)"
     };
 
-    std::string r_name[5] = {
+    std::string r_name[4] = {
         "r_sig",
         "r_all",
         "r_maj",
         "r_maj_reg",
-        "r_sig_reg"
     };
 
     if (!SWI) {
@@ -244,7 +240,7 @@ int main(int argc, char** argv) {
     std::cerr << "Press ENTER to Start Testing" << std::endl;
     std::cin.get();
 
-    for (int T = 0; T < 5; ++T) {
+    for (int T = 0; T < 4; ++T) {
         std::atomic<int> write_recv_cnt = 0;
         std::atomic<int> read_recv_cnt = 0;
         wan_agent::WriteRecvCallback WRC = [&]() {
