@@ -237,11 +237,12 @@ int main(int argc, char** argv) {
 
         for (int T = 0; T < 4; ++T) {
             std::cerr << "TEST CASE = " << T << std::endl;
-            int st = (SWI ? 2000 : 500);
-            int ed = (SWI ? 10000 : 1100);
-            int dt = (SWI ? 2000 : 200);
+            int st = (SWI ? 2000 : 450);
+            int ed = (SWI ? 10000 : 650);
+            int dt = (SWI ? 2000 : 50);
+            std::cout << T << ' ';
             for (int parm = st; parm <= ed; parm += dt) {
-                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 6000);
+                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 8000);
                 (SWI ? expected_mps = (int)1e7 : expected_mps = parm);
                 std::atomic<int> write_recv_cnt = 0;
                 std::atomic<int> read_recv_cnt = 0;
@@ -276,8 +277,10 @@ int main(int argc, char** argv) {
                 }
                 while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
                 check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T], SWI);
+                std::cout << ' ';
                 wan_agent_sender.wait();
             }
+            std::cout << endl;
         }
         fclose(stdout);
     }
