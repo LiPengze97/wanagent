@@ -273,9 +273,6 @@ int main(int argc, char** argv) {
         check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T]);
         wan_agent_sender.wait();
     }
-
-    std::cerr << "Press ENTER to kill." << std::endl;
-    std::cin.get();
     wan_agent_sender.shutdown_and_wait();
     free(time_keeper);
 }
