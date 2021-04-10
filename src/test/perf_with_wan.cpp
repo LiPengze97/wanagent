@@ -206,8 +206,8 @@ int main(int argc, char** argv) {
     std::string w_pr[5] = {
         "MIN($1,$2,$3,$4)",
         "MAX($1,$2,$3,$4)",
-        "KTH_MIN($3,$1,$2,$3,$4)"
-        "KTH_MIN($2,MAX($1,$2),$3,$4)"
+        "KTH_MIN($3,$1,$2,$3,$4)",
+        "KTH_MIN($2,MAX($1,$2),$3,$4)",
         "MAX(MIN($1,$2),$3,$4)"
     };
 
@@ -222,8 +222,8 @@ int main(int argc, char** argv) {
     std::string r_pr[5] = {
         "MIN($1,$2,$3,$4)",
         "MAX($1,$2,$3,$4)",
-        "KTH_MIN($2,$1,$2,$3,$4)"
-        "KTH_MIN($2,MIN($1,$2),$3,$4)"
+        "KTH_MIN($2,$1,$2,$3,$4)",
+        "KTH_MIN($2,MIN($1,$2),$3,$4)",
         "MIN(MAX($1,$2),$3,$4)"
     };
 
