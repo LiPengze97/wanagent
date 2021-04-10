@@ -110,6 +110,7 @@ inline void check_out(const int read_cnt, const int write_cnt, string pf) {
               << w_mean_ms << "(ms)" << endl;
     std::cout << "Std of read latency = " << r_std << endl;
     std::cout << "Std of write latency = " << w_std << endl;
+    fclose(stdout);
 }
 
 int main(int argc, char** argv) {
