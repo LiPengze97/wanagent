@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
         if (RH.requestType == 1) {
             version_t prev_version = pblob.getLatestVersion();
             version_t cur_version = prev_version + 1;
-            cerr << "cur_version = " << cur_version << endl;
+            // cerr << "cur_version = " << cur_version << endl;
             (*pblob) = std::move(Blob(msg, RH.payload_size));
             pblob.version(cur_version);
             seq_versions[RH.version] = cur_version;
