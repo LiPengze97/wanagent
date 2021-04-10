@@ -273,8 +273,8 @@ int main(int argc, char** argv) {
         check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T]);
         wan_agent_sender.wait();
     }
-    std::cerr << "hi" << std::endl;
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    wan_agent_sender.shutdown_and_wait();
+//    std::cerr << "hi" << std::endl;
+//    std::this_thread::sleep_for(std::chrono::seconds(1));
+//    wan_agent_sender.shutdown_and_wait();
     free(time_keeper);
 }
