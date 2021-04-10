@@ -233,7 +233,10 @@ int main(int argc, char** argv) {
             //warm up
             for (int i = 1; i <= 1000; ++i)
                 wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
-            std::this_thread::sleep_for(std::chrono::seconds(10));
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            for (int i = 1; i <= 1000; ++i)
+                wan_agent_sender.send_read_req(nullptr);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
         }
 
         if (SWI) freopen("write.log", "w", stdout);
