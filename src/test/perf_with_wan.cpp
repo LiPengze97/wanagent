@@ -235,9 +235,6 @@ int main(int argc, char** argv) {
         wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    
-    std::cerr << "Press ENTER to Start Testing" << std::endl;
-    std::cin.get();
 
     for (int T = 0; T < 4; ++T) {
         std::atomic<int> write_recv_cnt = 0;
