@@ -105,7 +105,7 @@ inline void check_out(const int read_cnt, const int write_cnt, string pf, int SW
         std::cout << thp_mibps;
     }
     else {
-        std::cout << r_mean_us;
+        std::cout << r_mean_ms;
     }
 }
 
