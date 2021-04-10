@@ -237,9 +237,9 @@ int main(int argc, char** argv) {
 
         for (int T = 0; T < 4; ++T) {
             std::cerr << "TEST CASE = " << T << std::endl;
-            int st = (SWI ? 2000 : 450);
-            int ed = (SWI ? 10000 : 650);
-            int dt = (SWI ? 2000 : 50);
+            int st = (SWI ? 2000 : 500);
+            int ed = (SWI ? 10000 : 800);
+            int dt = (SWI ? 2000 : 100);
             std::cout << T << ' ';
             for (int parm = st; parm <= ed; parm += dt) {
                 (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 8000);
