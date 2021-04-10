@@ -46,7 +46,7 @@ uint64_t tot_write_ops = 0;
 int MESSAGE_SIZE = 8000;
 int n_message = 0;
 
-inline void check_out(const int read_cnt, const int write_cnt, string pf, bool SWI) {
+inline void check_out(const int read_cnt, const int write_cnt, string pf, int SWI) {
     uint64_t r_tot_wait_time = 0;
     uint64_t w_tot_wait_time = 0;
     for (int i = 1; i <= read_cnt; ++i) {
@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
     std::string json_config;
 
     int expected_mps = 200;
-    bool SWI  = 0;
+    int SWI  = 0;
     
     while((opt = getopt(argc, argv, "c:n:p:s:m:")) != -1) {
         switch(opt) {
@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
                 MESSAGE_SIZE = static_cast<int>(std::stoi(optarg));
                 break;
             case 's':
-                SWI = static_cast<bool>(std::stoi(optarg));
+                SWI = static_cast<int>(std::stoi(optarg));
                 break;
             default:
                 std::cerr << "please enter config and trace" << std::endl;
