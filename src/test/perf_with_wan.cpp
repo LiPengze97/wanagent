@@ -43,16 +43,7 @@ uint64_t r_arrive_time[MAXOPS] = {0};
 uint64_t tot_read_ops = 0;
 uint64_t tot_write_ops = 0;
 
-struct R {
-    int seq;
-    wan_agent::ReadRecvCallback C;
-    R() {
-        C = [&](const uint64_t version, const site_id_t site, Blob&& obj) {
-            r_arrive_time[seq] = now_us();
-        };
-    }
-    void set_seq(int _seq) { seq = _seq; }
-} rnodes[MAXOPS];
+int MESSAGE_SIZE = 8000;
 
 inline void check_out(const int read_cnt, const int write_cnt, const string& trace) {
     uint64_t r_tot_wait_time = 0;
@@ -129,7 +120,7 @@ int main(int argc, char** argv) {
     int num_load = 0;
     int expected_mps = 200;
     bool SWI  = 0;
-    int MESSAGE_SIZE = 8000;
+    
     while((opt = getopt(argc, argv, "c:t:n:p:s:")) != -1) {
         switch(opt) {
             case 'c':
