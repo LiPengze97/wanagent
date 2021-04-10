@@ -65,13 +65,13 @@ int main(int argc, char** argv) {
         //           << ", message version:" << RH.version
         //           << endl;
         if (RH.requestType == 1) {
-            //version_t prev_version = pblob.getLatestVersion();
-            //version_t cur_version = prev_version + 1;
-            // cerr << "cur_version = " << cur_version << endl;
-            //(*pblob) = std::move(Blob(msg, RH.payload_size));
-            //pblob.version(cur_version);
-            //seq_versions[RH.version] = cur_version;
-            //assert(max_version < RH.version);
+            version_t prev_version = pblob.getLatestVersion();
+            version_t cur_version = prev_version + 1;
+            cerr << "cur_version = " << cur_version << endl;
+            (*pblob) = std::move(Blob(msg, RH.payload_size));
+            pblob.version(cur_version);
+            seq_versions[RH.version] = cur_version;
+            // assert(max_version < RH.version);
             ++ops_ctr;
             if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
             //max_version = RH.version;
