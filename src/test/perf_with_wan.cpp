@@ -234,12 +234,12 @@ int main(int argc, char** argv) {
 
         if (SWI) freopen("write.log", "w", stdout);
         else freopen("read.log", "w", stdout);
-        
+
         for (int T = 0; T < 4; ++T) {
             std::cerr << "TEST CASE = " << T << std::endl;
-            int st = (SWI ? 2000 : 900);
-            int ed = (SWI ? 10000 : 2700);
-            int dt = (SWI ? 2000 : 600);
+            int st = (SWI ? 2000 : 800);
+            int ed = (SWI ? 10000 : 1400);
+            int dt = (SWI ? 2000 : 200);
             std::cout << T << ' ';
             for (int parm = st; parm <= ed; parm += dt) {
                 (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
