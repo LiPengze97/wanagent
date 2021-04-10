@@ -456,7 +456,6 @@ void MessageSender::recv_read_ack_loop() {
                 read_message_counters[res.site_id]++;
                 auto pr_sf = read_stability_frontier;
                 read_predicate_calculation();
-                std::cerr << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
                 if (read_stability_frontier > pr_sf)
                     trigger_read_callback(res.seq, cur_version, res.site_id, std::move(cur_obj));
             }
