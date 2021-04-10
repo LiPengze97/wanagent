@@ -31,6 +31,8 @@ std::mutex all_lock;
 std::map<uint64_t, version_t> seq_versions;
 uint64_t max_version;
 
+char obj[1000000];
+
 int main(int argc, char** argv) {
     // TODO: should use code in wan_agent/wan_agent.hpp, not duplicated code.
 
@@ -52,12 +54,8 @@ int main(int argc, char** argv) {
                                        &pr, 
                                        false);
 
-    int ops_ctr = 0;
-
-    char obj[100000];
-    for (int i = 0; i < 8000; ++i) obj[i] = 'a';
-    obj[8000] = '\0';
-    int len = 8000;
+    std::atomic<int> ops_ctr = 0;
+    std::atomic<int> len = 0;
 
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader& RH, const char* msg) {
         // cout << "message received from site:" << RH.site_id
@@ -65,29 +63,35 @@ int main(int argc, char** argv) {
         //           << ", message version:" << RH.version
         //           << endl;
         if (RH.requestType == 1) {
-            version_t prev_version = pblob.getLatestVersion();
-            version_t cur_version = prev_version + 1;
+            // version_t prev_version = pblob.getLatestVersion();
+            // version_t cur_version = prev_version + 1;
             // cerr << "cur_version = " << cur_version << endl;
-            (*pblob) = std::move(Blob(msg, RH.payload_size));
-            pblob.version(cur_version);
-            seq_versions[RH.version] = cur_version;
+            // (*pblob) = std::move(Blob(msg, RH.payload_size));
+            // pblob.version(cur_version);
+            // seq_versions[RH.version] = cur_version;
             // assert(max_version < RH.version);
             ++ops_ctr;
-            if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
-            max_version = RH.version;
+            if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
+            for (register int i = 0; i < RH.payload_size; ++i) {
+                obj[i] = 'a';
+            }
+            obj[RH.payload_size] = '\0';
+            len = RH.payload_size;
+            // max_version = RH.version;
             // pblob.persist(cur_version);
             return std::make_pair(RH.version, std::move(Blob("done", 4)));
         } else {
             ++ops_ctr;
-            if (ops_ctr % 1000 == 0) std::cerr << ops_ctr << std::endl;
-            if (RH.version == (uint64_t)-1) {
-               auto cur_version = max_version;
-               return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
-            } else if (seq_versions.find(RH.version) == seq_versions.end()) {
-               return std::make_pair((uint64_t)-1, std::move(Blob("OBJ_NOT_FOUND",13)));
-            }
-            uint64_t cur_version = seq_versions[RH.version];
-            return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
+            if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
+            // if (RH.version == (uint64_t)-1) {
+            //    auto cur_version = max_version;
+            //    return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
+            // } else if (seq_versions.find(RH.version) == seq_versions.end()) {
+            //    return std::make_pair((uint64_t)-1, std::move(Blob("OBJ_NOT_FOUND",13)));
+            // }
+            // uint64_t cur_version = seq_versions[RH.version];
+            // return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
+            return std::make_pair(RH.version, std::move(Blob(obj, len)));
         }
     };
 

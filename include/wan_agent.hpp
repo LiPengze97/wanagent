@@ -456,6 +456,26 @@ public:
     uint64_t get_stability_frontier_arrive_time();
     void set_stability_frontier(int sf);
     void test_predicate();
+    void wait() {
+        bool mark = 1;
+        while (mark) {
+            mark = 0;
+            for (auto& p : message_counters) {
+                if (p.second != get_stability_frontier()) {
+                    mark = 1;
+                    break;
+                }
+            }
+            if (!mark) {
+                for (auto& p : read_message_counters) {
+                    if (p.second != message_sender->read_stability_frontier) {
+                        mark = 1;
+                        break;
+                    }
+                }
+            }
+        }
+    }
     /**
          * return a moveable counter table
          */
