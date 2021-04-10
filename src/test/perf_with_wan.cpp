@@ -234,8 +234,8 @@ int main(int argc, char** argv) {
 
         if (SWI) freopen("write.log", "w", stdout);
         else freopen("read.log", "w", stdout);
-        if (SWI) n_message = 20000;
-        else n_message = 50000;
+        if (SWI) n_message = 50000;
+        else n_message = 20000;
 
         for (int T = 0; T < 4; ++T) {
             std::cerr << "TEST CASE = " << T << std::endl;
