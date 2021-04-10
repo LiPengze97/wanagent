@@ -195,9 +195,6 @@ int main(int argc, char** argv) {
     };
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);
 
-    string obj = "";
-    for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
-
     std::string w_pr[4] = {
         "MIN($1,$2,$3,$4)",
         "MAX($1,$2,$3,$4)",
@@ -225,11 +222,18 @@ int main(int argc, char** argv) {
         "r_maj",
         "r_maj_reg",
     };
+
+    
+    string obj = "";
+    for (int i = 1; i <= 5000; ++i) obj += 'a';
+
     for (SWI = 0; SWI <= 1; ++SWI) {
         std::cerr << "TESTING ON " << (SWI ? "WRITE" : "READ") << std::endl;
         if (!SWI) {
-            wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            //warm up
+            for (int i = 1; i <= 1000; ++i)
+                wan_agent_sender.send_write_req(obj.c_str(), obj.size(), nullptr);
+            std::this_thread::sleep_for(std::chrono::seconds(10));
         }
 
         if (SWI) freopen("write.log", "w", stdout);
@@ -244,6 +248,8 @@ int main(int argc, char** argv) {
             for (int parm = st; parm <= ed; parm += dt) {
                 (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
                 (SWI ? expected_mps = (int)1e6 : expected_mps = parm);
+                obj = "";
+                for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
                 std::atomic<int> write_recv_cnt = 0;
                 std::atomic<int> read_recv_cnt = 0;
                 wan_agent::WriteRecvCallback WRC = [&]() {
