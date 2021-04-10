@@ -654,7 +654,7 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
     }
     
     buffer_list.push_back(std::move(*tmp));
-    enter_queue_time_keeper[msg_idx++] = get_time_us();
+//    enter_queue_time_keeper[msg_idx++] = get_time_us();
     size_mutex.unlock();
     not_empty.notify_one();
     return ret;
@@ -715,7 +715,7 @@ void MessageSender::send_msg_loop() {
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
-                leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
+//                leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
                 // buffer_size[curr_seqno] = size;
 
                 last_sent_seqno[site_id] = curr_seqno;
@@ -1023,7 +1023,7 @@ void WanAgentSender::shutdown_and_wait() {
     is_shutdown.store(true);
     // report_new_ack(); // to wake up all predicate_loop threads with a pusedo "new ack"
     // predicate_thread.join();
-    out_out_file();
+//    out_out_file();
 
     message_sender->shutdown();
     // send_msg_thread.join();
