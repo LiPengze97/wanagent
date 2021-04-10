@@ -244,12 +244,6 @@ struct LinkedBufferNode {
     // LinkedBufferNode* next;
 
     LinkedBufferNode() {}
-    void Destruct() {
-        if (message_body != nullptr) {
-            delete[] message_body;
-            message_body = nullptr;
-        }
-    }
 };
 
 // the Client worker

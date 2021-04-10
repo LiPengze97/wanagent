@@ -654,7 +654,6 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
     }
     
     buffer_list.push_back(std::move(*tmp));
-    delete tmp;
     enter_queue_time_keeper[msg_idx++] = get_time_us();
     size_mutex.unlock();
     not_empty.notify_one();
@@ -675,7 +674,6 @@ void MessageSender::read_enqueue(const uint64_t& version, ReadRecvCallback* RRC)
     // enter_queue_time_keeper[msg_idx++] = get_time_us();
     read_size_mutex.unlock();
     read_not_empty.notify_one();
-    delete tmp;
 }
 
 void MessageSender::send_msg_loop() {
@@ -782,9 +780,6 @@ void MessageSender::read_msg_loop() {
                 R_last_sent_seqno[site_id] = curr_seqno;
             }
         }
-
-        if (R_last_all_sent_seqno % 1000 == 0) 
-            std::cerr << "hiiiii " << R_last_all_sent_seqno << ' ' << read_buffer_list.size() << std::endl;
 
         auto it = std::min_element(R_last_sent_seqno.begin(), R_last_sent_seqno.end(),
                                    [](const auto& p1, const auto& p2) { 
