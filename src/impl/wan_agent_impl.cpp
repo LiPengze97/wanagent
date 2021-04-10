@@ -860,6 +860,7 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     predicate_fn_type prl = predicate_generator->get_predicate_function();
     auto inverse_predicate_str = reverser::get_inverse_predicate(predicate_str);
     std::istringstream i_iss(inverse_predicate_str);
+    inverse_predicate_generator = new Predicate_Generator(i_iss);
     predicate_fn_type iprl = inverse_predicate_generator->get_predicate_function();
     if(inplace) {
         std::cerr << predicate_str << ' ' << inverse_predicate_str << std::endl;
