@@ -32,8 +32,6 @@ static inline int Rand(int L, int R) {
 
 #define MAX_SEND_BUFFER_SIZE (102400)
 #define SLEEP_GRANULARITY_US (50)
-#define MESSAGE_SIZE (8000)
-
 const int MAXOPS = 1e5 + 100;
 
 uint64_t w_send_time[MAXOPS] = {0};
@@ -131,6 +129,7 @@ int main(int argc, char** argv) {
     int num_load = 0;
     int expected_mps = 200;
     bool SWI  = 0;
+    int MESSAGE_SIZE = 8000;
     while((opt = getopt(argc, argv, "c:t:n:p:s:")) != -1) {
         switch(opt) {
             case 'c':
@@ -147,6 +146,9 @@ int main(int argc, char** argv) {
                 break;
             case 's':
                 SWI = static_cast<bool>(std::stoi(optarg));
+                break;
+            case 'm':
+                MESSAGE_SIZE = static_cast<int>(std::stoi(optarg));
                 break;
             default:
                 std::cerr << "please enter config and trace" << std::endl;
