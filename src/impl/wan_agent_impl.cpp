@@ -27,7 +27,7 @@ inline uint64_t get_time_us() {
 
 namespace wan_agent {
 
-void WanAgent::load_config() noexcept(false) {
+void WanAgentAbstract::load_config() noexcept(false) {
     log_enter_func();
     // Check if all mandatory keys are included.
     static const std::vector<std::string> must_have{
@@ -77,7 +77,7 @@ void WanAgent::load_config() noexcept(false) {
     log_exit_func();
 }  // namespace wan_agent
 
-std::string WanAgent::get_local_ip_and_port() noexcept(false) {
+std::string WanAgentAbstract::get_local_ip_and_port() noexcept(false) {
     std::string local_ip;
     unsigned short local_port = 0;
     if(config.find(WAN_AGENT_CONF_PRIVATE_IP) != config.end() && config.find(WAN_AGENT_CONF_PRIVATE_PORT) != config.end()) {
@@ -89,7 +89,7 @@ std::string WanAgent::get_local_ip_and_port() noexcept(false) {
     return local_ip + ":" + std::to_string(local_port);
 }
 
-WanAgent::WanAgent(const nlohmann::json& wan_group_config, std::string log_level)
+WanAgentAbstract::WanAgentAbstract(const nlohmann::json& wan_group_config, std::string log_level)
         : is_shutdown(false),
           config(wan_group_config) {
     // this->message_counters = std::make_unique<std::map<uint32_t,std::atomic<uint64_t>>>();
@@ -102,7 +102,7 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
                                            unsigned short local_port,
                                            const size_t max_payload_size,
                                            const RemoteMessageCallback& rmc,
-                                           WanAgent* hugger)
+                                           WanAgentAbstract* hugger)
         : local_site_id(local_site_id),
           num_senders(num_senders),
           max_payload_size(max_payload_size),
@@ -242,7 +242,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
 
 WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                                const RemoteMessageCallback& rmc, std::string log_level)
-        : WanAgent(wan_group_config, log_level),
+        : WanAgentAbstract(wan_group_config, log_level),
           remote_message_callback(rmc),
           remote_message_service(
                   local_site_id,
@@ -258,9 +258,7 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
     // // TODO: for now, all sites must start in 3 seconds; to be replaced with retry mechanism when establishing sockets
     // sleep(3);
 
-    std::cout << "Press ENTER to kill." << std::endl;
-    std::cin.get();
-    shutdown_and_wait();
+    
 }
 
 void WanAgentServer::shutdown_and_wait() {
@@ -791,7 +789,7 @@ void MessageSender::read_msg_loop() {
 WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
                                const PredicateLambda& pl,
                                std::string log_level)
-        : WanAgent(wan_group_config, log_level),
+        : WanAgentAbstract(wan_group_config, log_level),
           has_new_ack(false),
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
@@ -1006,7 +1004,7 @@ void WanAgentSender::shutdown_and_wait() {
     is_shutdown.store(true);
     // report_new_ack(); // to wake up all predicate_loop threads with a pusedo "new ack"
     // predicate_thread.join();
-    out_out_file();
+    // out_out_file();
 
     message_sender->shutdown();
     // send_msg_thread.join();

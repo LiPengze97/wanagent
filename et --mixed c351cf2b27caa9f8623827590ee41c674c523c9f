@@ -1,0 +1,89 @@
+[33mcommit 450aba7196e667f6c3477ae20c18f483e270f85b[m
+Author: lipengze97 <vonei@126.com>
+Date:   Mon Apr 12 01:58:04 2021 -0600
+
+    create a compelete wanagent that can both send and receive3
+
+[33mcommit f06d4517465c2ef1e986b35d27fde14cb0d81cf8[m
+Author: lipengze97 <vonei@126.com>
+Date:   Mon Apr 12 01:37:56 2021 -0600
+
+    create a compelete wanagent that can both send and receive
+
+[33mcommit c351cf2b27caa9f8623827590ee41c674c523c9f[m
+Author: lipengze97 <vonei@126.com>
+Date:   Mon Apr 12 01:36:14 2021 -0600
+
+    create a compelete wanagent that can both send and receive
+
+[33mcommit 4a3b8dbd4b8900e1e2b95f306599f90361a61627[m
+Author: lipengze97 <vonei@126.com>
+Date:   Mon Apr 12 01:31:52 2021 -0600
+
+    create a compelete wanagent that can both send and receive
+
+[33mcommit c44a99bdcfd39adbd05589ebe1446cfb5c54c10e[m
+Author: equ-0 <zijianding@163.com>
+Date:   Sun Apr 4 18:19:10 2021 +0800
+
+    fix ./configs
+
+[33mcommit 64a545366f7dd39ffe11103e645190d3735bbf04[m
+Author: equ-0 <zijianding@163.com>
+Date:   Sun Apr 4 18:13:21 2021 +0800
+
+    change log format
+
+[33mcommit cb2f13e289e60af84356f3bb2b719e45c1b8ddea[m
+Author: equ-0 <zijianding@163.com>
+Date:   Sun Apr 4 18:12:35 2021 +0800
+
+    fix race in wan_agent_server, change log format
+
+[33mcommit 9b12def1310dbaa1188798a6dc8506685422e740[m
+Author: equ-0 <zijianding@163.com>
+Date:   Thu Apr 1 15:49:56 2021 +0800
+
+    calculate inverse predicate and use it for read
+
+[33mcommit bd3fe8c196eb3ada09b0d5cdaf166a0ee473ebac[m
+Author: equ-0 <zijianding@163.com>
+Date:   Thu Apr 1 00:58:24 2021 +0800
+
+    add predicate to read request (simplest impl)
+
+[33mcommit b2cbc55010f705cd85998e72cf21842451793d6f[m
+Author: equ-0 <zijianding@163.com>
+Date:   Tue Mar 30 21:03:43 2021 +0800
+
+    add default value to read request
+
+[33mcommit a4e85439ee294be322192ac6e74d2799c066328c[m
+Author: equ-0 <zijianding@163.com>
+Date:   Thu Mar 25 21:42:44 2021 +0800
+
+    change read api and fix memory leak(maybe)
+
+[33mcommit 60f739045e0b584cbcbbf983b42b819034c8e9e7[m
+Author: equ-0 <zijianding@163.com>
+Date:   Wed Mar 24 22:28:00 2021 +0800
+
+    update read request, implement server and client
+
+[33mcommit a6c7bbb130fe47944d19a125a1ed28be029d18de[m
+Author: equ-0 <zijianding@163.com>
+Date:   Tue Mar 23 19:13:43 2021 +0800
+
+    modified to be able to install on clean machine
+
+[33mcommit b6b5cf1f883e1774dac23dafd87fee05d4496c8f[m
+Author: lipengze97 <vonei@126.com>
+Date:   Thu Mar 18 20:55:58 2021 -0700
+
+    first commit
+
+[33mcommit 17b093fe0be43c6ae703f2f26c5605b0c8d4469d[m
+Author: Panlichen <myles.l.pan@gmail.com>
+Date:   Thu Mar 18 20:43:56 2021 -0700
+
+    First commit
