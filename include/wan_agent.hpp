@@ -312,7 +312,7 @@ namespace wan_agent
         uint64_t max_version = 0;
 
         std::map<uint64_t, ReadRecvCallback> read_callback_store;
-
+        
     public:
         std::vector<pre_operation> operations;
         // uint64_t *buffer_size = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
@@ -498,7 +498,6 @@ namespace wan_agent
             wansender = new WanAgentSender(config, pl);
         }
         ~WanAgent(){
-            
         }
         void shutdown_and_wait(){
             wanserver->shutdown_and_wait();
