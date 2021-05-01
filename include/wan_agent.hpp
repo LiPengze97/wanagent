@@ -382,6 +382,7 @@ namespace wan_agent
         void send_msg_loop();
         void read_msg_loop();
         void predicate_calculation();
+        void set_read_quorum(int read_quorum);
         // void read_predicate_calculation();
         void wait_stability_frontier_loop(int sf);
         void sf_time_checker_loop();
@@ -474,6 +475,8 @@ namespace wan_agent
         void change_predicate(std::string key);
 
         int get_stability_frontier();
+
+        void set_read_quorum(int read_quorum);
 
         uint64_t get_stability_frontier_arrive_time();
         void set_stability_frontier(int sf);

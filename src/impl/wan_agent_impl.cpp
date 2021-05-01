@@ -221,7 +221,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                         throw std::runtime_error("Failed to receive object");
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
-                success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
+                success = sock_write(connected_sock_fd, Response{version_obj.second.size, version_obj.first, header.seq, local_site_id});
                 std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
                 if (header.version != -1 && version_obj.first != header.version)
                     throw std::runtime_error("Receiver: something wrong with version");
@@ -344,8 +344,8 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
     }
 
     nServer = message_counters.size();
-    std::cout << "nServer = " << nServer << std::endl;
-
+    set_read_quorum(message_counters.size()/2+1);
+    std::cout << "nServer = " << nServer << ",read_quorum " << read_quorum << std::endl;
     log_exit_func();
 }
 
@@ -414,6 +414,10 @@ void MessageSender::recv_ack_loop() {
     log_exit_func();
 }
 
+void MessageSender::set_read_quorum(int read_quorum){
+    this->read_quorum = read_quorum;
+}
+
 void MessageSender::recv_read_ack_loop() {
     log_enter_func();
     auto tid = pthread_self();
@@ -442,18 +446,24 @@ void MessageSender::recv_read_ack_loop() {
                 success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
                 if (!success)
                     throw std::runtime_error("failed receiving object for read request");
-                if(read_highest_version_keeper.count(res.seq) == 0){
-                    read_highest_version_keeper[res.seq] = std::make_pair(cur_obj, res.version);
-                }else{
-                    if(read_highest_version_keeper[res.seq].second < res.version){
+                // if there are already read_quorum read acks, discard all future read acks.
+                if(read_seq_counter[res.seq] < read_quorum){
+                    if(read_highest_version_keeper.count(res.seq) == 0){
                         read_highest_version_keeper[res.seq] = std::make_pair(cur_obj, res.version);
+                    }else{
+                        if(read_highest_version_keeper[res.seq].second < res.version){
+                            read_highest_version_keeper[res.seq] = std::make_pair(cur_obj, res.version);
+                        }
                     }
+                    if(++read_seq_counter[res.seq] == read_quorum){
+                        (*read_callback_store[res.seq])(res.version, std::move(read_highest_version_keeper[res.seq].first));
+                        read_highest_version_keeper.erase(read_highest_version_keeper.find(res.seq));
+                        read_callback_store.erase(read_callback_store.find(res.seq));
+                    }
+                }else{
+                    std::cout << "discard read ACK " << std::to_string(res.seq) <<" because the read is return" << std::endl;
                 }
-                if(++read_seq_counter[res.seq] == read_quorum){
-                    (*read_callback_store[res.seq])(res.version, std::move(read_highest_version_keeper[res.seq].first));
-                    read_highest_version_keeper.erase(read_highest_version_keeper.find(res.seq));
-                    read_callback_store.erase(read_callback_store.find(res.seq));
-                }
+                
                 
                 // read_predicate_calculation();
                 // std::cout << "current read stability frontier = " + std::to_string(read_stability_frontier) + '\n';
@@ -840,7 +850,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     send_msg_thread = std::thread(&MessageSender::send_msg_loop, message_sender.get());
     recv_read_ack_thread = std::thread(&MessageSender::recv_read_ack_loop, message_sender.get());
     read_msg_thread = std::thread(&MessageSender::read_msg_loop, message_sender.get());
-
+    // message_sender->set_read_quorum(message_counters.size()/2+1);
     message_sender->predicate = predicate;
     message_sender->inverse_predicate = inverse_predicate;
 }
@@ -873,6 +883,10 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
         std::cout << "sender's operation: " << message_sender->operations.size() << std::endl;
     }
     // test_predicate();
+}
+
+void WanAgentSender::set_read_quorum(int read_quorum){
+    message_sender->set_read_quorum(read_quorum);
 }
 
 void WanAgentSender::generate_predicate() {

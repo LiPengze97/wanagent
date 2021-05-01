@@ -264,7 +264,11 @@ int main(int argc, char **argv)
             // }
             // uint64_t cur_version = seq_versions[RH.version];
             // return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
-            return std::make_pair(RH.version, std::move(Blob(obj.c_str(), len)));
+
+            //** pseudo-version 12345, because pure WANAgent does not have data
+            long unsigned int tmp_version = 12345;
+            return std::make_pair(tmp_version, std::move(Blob(obj.c_str(), len)));
+            // return std::make_pair(RH.version, std::move(Blob(obj.c_str(), len)));
         }
     };
     wan_agent::PredicateLambda pl = [&](const std::map<uint32_t, uint64_t> &table) {
@@ -307,8 +311,9 @@ int main(int argc, char **argv)
         }
     };
     wan_agent::WanAgent wanagent(conf, pl, rmc);
-    if (is_sender)
-    {
+
+    // simple test
+    if(is_sender){
         std::atomic<int> write_recv_cnt = 0;
         std::atomic<int> read_recv_cnt = 0;
         wan_agent::WriteRecvCallback WRC = [&]() {
@@ -316,77 +321,97 @@ int main(int argc, char **argv)
         };
         wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
             r_arrive_time[++read_recv_cnt] = now_us();
-            std::cout << "receive read with version " << version <<" !!";
+            std::cout << "receive read with version " << version <<" !!" << std::endl;
         };
-        std::cout << "Press ENTER to send start the experiment." << std::endl;
-        std::cin.get();
-
-        for (SWI = 0; SWI <= 1; ++SWI) {
-        std::cerr << "TESTING ON " << (SWI ? "WRITE" : "READ") << std::endl;
-        if (!SWI) {
-            //warm up
-            for (int i = 1; i <= 1000; ++i)
-                wanagent.wansender->send_write_req(obj.c_str(), obj.size(), nullptr);
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-            for (int i = 1; i <= 1000; ++i)
-                wanagent.wansender->send_read_req(nullptr);
-            std::this_thread::sleep_for(std::chrono::seconds(5));
-        }
-
-        if (SWI) freopen("write.log", "w", stdout);
-        else freopen("read.log", "w", stdout);
-
-        for (int T = 0; T < 4; ++T) {
-            std::cerr << "TEST CASE = " << T << std::endl;
-            int st = (SWI ? 2000 : 800);
-            int ed = (SWI ? 10000 : 1400);
-            int dt = (SWI ? 2000 : 200);
-            std::cout << T << ' ';
-            for (int parm = st; parm <= ed; parm += dt) {
-                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
-                (SWI ? expected_mps = (int)1e6 : expected_mps = parm);
-                obj = "";
-                for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
-                std::atomic<int> write_recv_cnt = 0;
-                std::atomic<int> read_recv_cnt = 0;
-                wan_agent::WriteRecvCallback WRC = [&]() {
-                    w_arrive_time[++write_recv_cnt] = now_us();
-                };
-                wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
-                    r_arrive_time[++read_recv_cnt] = now_us();
-                };
-                std::cerr << "TESTING on predicate :" << (SWI ? w_name[T] : r_name[T]) << std::endl;
-                wanagent.wansender->submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[T] : r_pr[T], 1);
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                int read_ctr = 0, write_ctr = 0;
-                uint64_t start_time = now_us();
-                uint64_t now_time;
-                for (int i = 1; i <= n_message; ++i) {
-                    if (i % 5000 == 0) cerr << i << endl;
-                    now_time = now_us();
-                    while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
-                        std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
-                        now_time = now_us();
-                    }
-                    if (SWI) {
-                        ++write_ctr;
-                        w_send_time[write_ctr] = now_us();
-                        wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);
-                    } else {
-                        ++read_ctr;
-                        r_send_time[read_ctr] = now_us();
-                        wanagent.wansender->send_read_req(&RRC);
-                    }
-                }
-                while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
-                check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T], SWI);
-                std::cout << ' ';
-                wanagent.wansender->wait();
-            }
-            std::cout << endl;
-        }
-        fclose(stdout);
+        for (int i = 1; i <= 10; ++i)
+            wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        for (int i = 1; i <= 30; ++i)
+            wanagent.wansender->send_read_req(&RRC);
     }
+
+    // complete test
+    /*
+    if (is_sender)
+    {
+            std::atomic<int> write_recv_cnt = 0;
+            std::atomic<int> read_recv_cnt = 0;
+            wan_agent::WriteRecvCallback WRC = [&]() {
+                w_arrive_time[++write_recv_cnt] = now_us();
+            };
+            wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
+                r_arrive_time[++read_recv_cnt] = now_us();
+                std::cout << "receive read with version " << version <<" !!";
+            };
+            std::cout << "Press ENTER to send start the experiment." << std::endl;
+            std::cin.get();
+
+            for (SWI = 0; SWI <= 1; ++SWI) {
+            std::cerr << "TESTING ON " << (SWI ? "WRITE" : "READ") << std::endl;
+            if (!SWI) {
+                //warm up
+                for (int i = 1; i <= 1000; ++i)
+                    wanagent.wansender->send_write_req(obj.c_str(), obj.size(), nullptr);
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+                for (int i = 1; i <= 1000; ++i)
+                    wanagent.wansender->send_read_req(nullptr);
+                std::this_thread::sleep_for(std::chrono::seconds(5));
+            }
+
+            if (SWI) freopen("write.log", "w", stdout);
+            else freopen("read.log", "w", stdout);
+
+            for (int T = 0; T < 4; ++T) {
+                std::cerr << "TEST CASE = " << T << std::endl;
+                int st = (SWI ? 2000 : 800);
+                int ed = (SWI ? 10000 : 1400);
+                int dt = (SWI ? 2000 : 200);
+                std::cout << T << ' ';
+                for (int parm = st; parm <= ed; parm += dt) {
+                    (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
+                    (SWI ? expected_mps = (int)1e6 : expected_mps = parm);
+                    obj = "";
+                    for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
+                    std::atomic<int> write_recv_cnt = 0;
+                    std::atomic<int> read_recv_cnt = 0;
+                    wan_agent::WriteRecvCallback WRC = [&]() {
+                        w_arrive_time[++write_recv_cnt] = now_us();
+                    };
+                    wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
+                        r_arrive_time[++read_recv_cnt] = now_us();
+                    };
+                    std::cerr << "TESTING on predicate :" << (SWI ? w_name[T] : r_name[T]) << std::endl;
+                    wanagent.wansender->submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[T] : r_pr[T], 1);
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                    int read_ctr = 0, write_ctr = 0;
+                    uint64_t start_time = now_us();
+                    uint64_t now_time;
+                    for (int i = 1; i <= n_message; ++i) {
+                        if (i % 5000 == 0) cerr << i << endl;
+                        now_time = now_us();
+                        while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
+                            std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+                            now_time = now_us();
+                        }
+                        if (SWI) {
+                            ++write_ctr;
+                            w_send_time[write_ctr] = now_us();
+                            wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);
+                        } else {
+                            ++read_ctr;
+                            r_send_time[read_ctr] = now_us();
+                            wanagent.wansender->send_read_req(&RRC);
+                        }
+                    }
+                    while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
+                    check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T], SWI);
+                    std::cout << ' ';
+                    wanagent.wansender->wait();
+                }
+                std::cout << endl;
+            }
+            fclose(stdout);
+        }
         std::cout << "Done send messages." << std::endl;
         std::cout << "Press ENTER to kill." << std::endl;
         std::cin.get();
@@ -394,7 +419,7 @@ int main(int argc, char **argv)
         wanagent.shutdown_and_wait();
         free(time_keeper);
     }
-
+    */
     std::cout << "Press ENTER to kill." << std::endl;
     std::cin.get();
     wanagent.shutdown_and_wait();
