@@ -10,45 +10,97 @@
 using std::cerr;
 using std::cout;
 using std::endl;
+using std::string;
 using namespace wan_agent;
 using namespace persistent;
 
-static uint64_t now_us()
-{
+static inline uint64_t now_us() {
     struct timespec tv;
     clock_gettime(CLOCK_REALTIME, &tv);
     return (tv.tv_sec * 1000000 + tv.tv_nsec / 1000);
 }
 
-static void print_statistics(uint64_t *time_keeper, std::size_t number_of_messages, std::size_t size_of_message)
-{
-    double sum_min = 0.0f, sum_max = 0.0f, sum_median = 0.0f;
-    std::size_t i;
-    uint64_t *latencies = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * number_of_messages * 3));
-    for (i = 0; i < number_of_messages; i++)
-    {
-        latencies[i * 3] = (time_keeper[i * 4 + 1] - time_keeper[i * 4]);
-        latencies[i * 3 + 1] = (time_keeper[i * 4 + 2] - time_keeper[i * 4]);
-        latencies[i * 3 + 2] = (time_keeper[i * 4 + 3] - time_keeper[i * 4]);
-        sum_min += latencies[i * 3];
-        sum_median += latencies[i * 3 + 1];
-        sum_max += latencies[i * 3 + 2];
+static inline int Rand(int L, int R) {
+    return rand() % (R - L + 1) + L;
+}
+
+#define MAX_SEND_BUFFER_SIZE (102400)
+#define SLEEP_GRANULARITY_US (50)
+const int MAXOPS = 1e5 + 100;
+
+uint64_t w_send_time[MAXOPS] = {0};
+uint64_t w_arrive_time[MAXOPS] = {0};
+
+uint64_t r_send_time[MAXOPS] = {0};
+uint64_t r_arrive_time[MAXOPS] = {0};
+
+uint64_t tot_read_ops = 0;
+uint64_t tot_write_ops = 0;
+
+int MESSAGE_SIZE = 8000;
+int n_message = 0;
+
+inline void check_out(const int read_cnt, const int write_cnt, string pf, int SWI) {
+    uint64_t r_tot_wait_time = 0;
+    uint64_t w_tot_wait_time = 0;
+    for (int i = 1; i <= read_cnt; ++i) {
+        assert(r_arrive_time[i] >= r_send_time[i]);
+        r_tot_wait_time += (r_arrive_time[i] - r_send_time[i]);
     }
-    /*
-    std::cout << "one stability frontier latency = " << sum_min/number_of_messages << " us." << std::endl;
-    std::cout << "majority stability frontier latency = " << sum_median/number_of_messages << " us." << std::endl;
-    std::cout << "global stability frontier latency = " << sum_max/number_of_messages << " us." << std::endl;
-    // list all latencies:
-    std::cout << "seqno\tone\tmajority\tglobal" << std::endl;
-    for (i=0;i<number_of_messages;i++) {
-        std::cout << i << "\t"
-                  << latencies[3*i] << "\t"
-                  << latencies[3*i+1] << "\t"
-                  << latencies[3*i+2] << std::endl;
+    for (int i = 1; i <= write_cnt; ++i) {
+        assert(w_arrive_time[i] >= w_send_time[i]);
+        w_tot_wait_time += (w_arrive_time[i] - w_send_time[i]);
     }
-     */
-    std::cout << size_of_message / 1024 << "," << sum_min / number_of_messages / 1000 << "," << sum_median / number_of_messages / 1000 << "," << sum_max / number_of_messages / 1000 << "," << (size_of_message * number_of_messages / 1024.0 * 1000000) / ((time_keeper[(number_of_messages - 1) * 4 + 1] - time_keeper[0])) << "," << (size_of_message * number_of_messages / 1024.0 * 1000000) / ((time_keeper[(number_of_messages - 1) * 4 + 2] - time_keeper[0])) << "," << (size_of_message * number_of_messages / 1024.0 * 1000000) / ((time_keeper[(number_of_messages - 1) * 4 + 3] - time_keeper[0])) << std::endl;
-    free(latencies);
+    long double r_mean_us = (long double)r_tot_wait_time/read_cnt;
+    long double w_mean_us = (long double)w_tot_wait_time/write_cnt;
+    long double r_mean_ms = (long double)r_mean_us/1000.0;
+    long double w_mean_ms = (long double)w_mean_us/1000.0;
+
+    long double w_std = 0;
+    long double r_std = 0;
+    for (int i = 1; i <= read_cnt; ++i) {
+        long double dur = (r_arrive_time[i] - r_send_time[i])/1000.0;
+        r_std += (dur - r_mean_ms) * (dur - r_mean_ms);
+    }
+    r_std /= (long double)(read_cnt - 1);
+    r_std = sqrt(r_std);
+    for (int i = 1; i <= write_cnt; ++i) {
+        long double dur = (w_arrive_time[i] - w_send_time[i])/1000.0;
+        w_std += (dur - w_mean_ms) * (dur - w_mean_ms);
+    }
+    w_std /= (long double)(write_cnt - 1);
+    w_std = sqrt(w_std);
+
+    uint64_t mx_time = 0;
+    if (read_cnt) mx_time = r_arrive_time[read_cnt];
+    if (write_cnt) mx_time = std::max(mx_time, w_arrive_time[write_cnt]);
+    uint64_t mn_time = (uint64_t)-1;
+    if (read_cnt) mn_time = r_send_time[1];
+    if (write_cnt) mn_time = std::min(mn_time, w_send_time[1]);
+
+    long double tot_dur = mx_time - mn_time;
+    
+    long double tot_bytes = MESSAGE_SIZE * n_message;
+    long double tot_ops = 100000;
+
+    long double thp_mibps = tot_bytes * 1000000/1048576/tot_dur;
+    long double thp_ops = tot_ops * 1000000/tot_dur;
+
+    std::cerr << "--------- " << pf << " ---------" << std::endl;    
+    std::cerr << "Throughput (MiB/s): " << thp_mibps << std::endl;
+    std::cerr << "Throughput (Ops/s): " << thp_ops << std::endl;
+    std::cerr << "Average Read Latency = " << r_mean_us << "(us) " 
+              << r_mean_ms << "(ms)" << endl;
+    std::cerr << "Average Write Latency = " << w_mean_us << "(us) " 
+              << w_mean_ms << "(ms)" << endl;
+    std::cerr << "Std of read latency = " << r_std << endl;
+    std::cerr << "Std of write latency = " << w_std << endl;
+    if (SWI) {
+        std::cout << thp_mibps;
+    }
+    else {
+        std::cout << r_mean_ms;
+    }
 }
 
 static void print_help(const char *cmd)
@@ -69,16 +121,15 @@ uint64_t max_version;
 
 int main(int argc, char **argv)
 {
-    // TODO: 这里的逻辑应该是，要么是sender，c s i m n都有，要么是receiver，只有c
     int opt;
     bool is_sender = false;
     std::string json_config;
-    std::size_t send_interval_us = 0;
     std::size_t message_size = 0;
     std::size_t number_of_messages = 0;
-    std::size_t expected_mps = 0;
+    std::size_t expected_mps = 200;
+    int SWI  = 0;
 
-    while ((opt = getopt(argc, argv, "c:si:m:n:p:")) != -1)
+    while ((opt = getopt(argc, argv, "c:s:i:m:n:p:")) != -1)
     {
         switch (opt)
         {
@@ -88,9 +139,6 @@ int main(int argc, char **argv)
         case 's':
             is_sender = true;
             break;
-        case 'i':
-            send_interval_us = static_cast<std::size_t>(std::stol(optarg));
-            break;
         case 'm':
             message_size = static_cast<std::size_t>(std::stol(optarg));
             break;
@@ -99,6 +147,9 @@ int main(int argc, char **argv)
             break;
         case 'p':
             expected_mps = static_cast<std::size_t>(std::stol(optarg));
+            break;
+        case 't':
+            SWI = static_cast<int>(std::stoi(optarg));
             break;
         default:
             print_help(argv[0]);
@@ -117,8 +168,7 @@ int main(int argc, char **argv)
     {
         std::cout << "number_of_messages = " << number_of_messages << std::endl;
         std::cout << "message_size = " << message_size << std::endl;
-        std::cout << "intervals = " << send_interval_us << " us" << std::endl;
-        if (number_of_messages <= 0 || message_size <= 0 || send_interval_us < 0)
+        if (number_of_messages <= 0 || message_size <= 0)
         {
             std::cerr << "invalid argument." << std::endl;
             return -1;
@@ -146,6 +196,37 @@ int main(int argc, char **argv)
                                        &pr,
                                        false);
 
+    std::atomic<int> ops_ctr = 0;
+    std::atomic<int> len = 0;
+    string obj = "";
+    for (int i = 1; i <= 5000; ++i) obj += 'a';
+    std::string w_pr[4] = {
+        "MIN($1,$2,$3,$4)",
+        "MAX($1,$2,$3,$4)",
+        "KTH_MIN($2,$1,$2,$3,$4)",
+        "KTH_MIN($2,MAX($1,$2),$3,$4)",
+    };
+
+    std::string w_name[4] = {
+        "w_all",
+        "w_sig",
+        "w_maj",
+        "w_maj_reg",
+    };
+
+    std::string r_pr[4] = {
+        "MIN($1,$2,$3,$4)",
+        "MAX($1,$2,$3,$4)",
+        "KTH_MIN($3,$1,$2,$3,$4)",
+        "KTH_MIN($2,MIN($1,$2),$3,$4)",
+    };
+
+    std::string r_name[4] = {
+        "r_sig",
+        "r_all",
+        "r_maj",
+        "r_maj_reg",
+    };
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
         cout << "message received from site:" << RH.site_id
              << ", message size:" << RH.payload_size << " bytes"
@@ -153,36 +234,37 @@ int main(int argc, char **argv)
              << endl;
         if (RH.requestType == 1)
         {
-            all_lock.lock();
-            version_t prev_version = pblob.getLatestVersion();
-            version_t cur_version = prev_version + 1;
-            cerr << "cur_version = " << cur_version << endl;
-            (*pblob) = std::move(Blob(msg, RH.payload_size));
-            pblob.version(cur_version);
-            seq_versions[RH.version] = cur_version;
-            assert(max_version < RH.version);
-            max_version = RH.version;
-            pblob.persist(cur_version);
-            all_lock.unlock();
+            // version_t prev_version = pblob.getLatestVersion();
+            // version_t cur_version = prev_version + 1;
+            // cerr << "cur_version = " << cur_version << endl;
+            // (*pblob) = std::move(Blob(msg, RH.payload_size));
+            // pblob.version(cur_version);
+            // seq_versions[RH.version] = cur_version;
+            // assert(max_version < RH.version);
+            ++ops_ctr;
+            if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
+            for (int i = 0; i < RH.payload_size; ++i) {
+                obj[i] = 'a';
+            }
+            obj[RH.payload_size] = '\0';
+            len = RH.payload_size;
+            // max_version = RH.version;
+            // pblob.persist(cur_version);
             return std::make_pair(RH.version, std::move(Blob("done", 4)));
         }
         else
         {
-            all_lock.lock();
-            if (RH.version == (uint64_t)-1)
-            {
-                auto cur_version = max_version;
-                all_lock.unlock();
-                return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
-            }
-            else if (seq_versions.find(RH.version) == seq_versions.end())
-            {
-                all_lock.unlock();
-                return std::make_pair((uint64_t)-1, std::move(Blob("SEQ_NOT_FOUND", 13)));
-            }
-            uint64_t cur_version = seq_versions[RH.version];
-            all_lock.unlock();
-            return std::make_pair(cur_version, std::move(*(pblob.get(cur_version))));
+            ++ops_ctr;
+            if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
+            // if (RH.version == (uint64_t)-1) {
+            //    auto cur_version = max_version;
+            //    return std::make_pair(cur_version, std::move(*(pblob).get(cur_version)));
+            // } else if (seq_versions.find(RH.version) == seq_versions.end()) {
+            //    return std::make_pair((uint64_t)-1, std::move(Blob("OBJ_NOT_FOUND",13)));
+            // }
+            // uint64_t cur_version = seq_versions[RH.version];
+            // return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
+            return std::make_pair(RH.version, std::move(Blob(obj.c_str(), len)));
         }
     };
     wan_agent::PredicateLambda pl = [&](const std::map<uint32_t, uint64_t> &table) {
@@ -227,44 +309,89 @@ int main(int argc, char **argv)
     wan_agent::WanAgent wanagent(conf, pl, rmc);
     if (is_sender)
     {
-        std::cout << "Press ENTER to send a message." << std::endl;
+        std::atomic<int> write_recv_cnt = 0;
+        std::atomic<int> read_recv_cnt = 0;
+        wan_agent::WriteRecvCallback WRC = [&]() {
+            w_arrive_time[++write_recv_cnt] = now_us();
+        };
+        wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
+            r_arrive_time[++read_recv_cnt] = now_us();
+            std::cout << "receive read with version " << version <<" !!";
+        };
+        std::cout << "Press ENTER to send start the experiment." << std::endl;
         std::cin.get();
-        // prepare the sender buffer
-        char *payload = static_cast<char *>(malloc(MAX_SEND_BUFFER_SIZE));
-        if (payload == nullptr)
-        {
-            throw std::runtime_error("failed to allocate payload memory");
-        }
-        for (std::size_t i = 0; i < message_size; i++)
-        {
-            payload[i] = '0' + (i % 10);
+
+        for (SWI = 0; SWI <= 1; ++SWI) {
+        std::cerr << "TESTING ON " << (SWI ? "WRITE" : "READ") << std::endl;
+        if (!SWI) {
+            //warm up
+            for (int i = 1; i <= 1000; ++i)
+                wanagent.wansender->send_write_req(obj.c_str(), obj.size(), nullptr);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+            for (int i = 1; i <= 1000; ++i)
+                wanagent.wansender->send_read_req(nullptr);
+            std::this_thread::sleep_for(std::chrono::seconds(5));
         }
 
-        std::cout << "payload size is " << strlen(payload) << std::endl;
-        // send ...
-        for (uint64_t seq = 0; seq < number_of_messages; seq++)
-        {
-            time_keeper[seq * 4] = now_us();
-            wanagent.wansender->send(payload, message_size);
-            //            std::cout << "send a message with size = " << message_size << std::endl;
-            while (now_us() < (time_keeper[seq * 4] + send_interval_us))
-            {
-                std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+        if (SWI) freopen("write.log", "w", stdout);
+        else freopen("read.log", "w", stdout);
+
+        for (int T = 0; T < 4; ++T) {
+            std::cerr << "TEST CASE = " << T << std::endl;
+            int st = (SWI ? 2000 : 800);
+            int ed = (SWI ? 10000 : 1400);
+            int dt = (SWI ? 2000 : 200);
+            std::cout << T << ' ';
+            for (int parm = st; parm <= ed; parm += dt) {
+                (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
+                (SWI ? expected_mps = (int)1e6 : expected_mps = parm);
+                obj = "";
+                for (int i = 1; i <= MESSAGE_SIZE; ++i) obj += 'a';
+                std::atomic<int> write_recv_cnt = 0;
+                std::atomic<int> read_recv_cnt = 0;
+                wan_agent::WriteRecvCallback WRC = [&]() {
+                    w_arrive_time[++write_recv_cnt] = now_us();
+                };
+                wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
+                    r_arrive_time[++read_recv_cnt] = now_us();
+                };
+                std::cerr << "TESTING on predicate :" << (SWI ? w_name[T] : r_name[T]) << std::endl;
+                wanagent.wansender->submit_predicate("auto_test"+std::to_string(T), SWI ? w_pr[T] : r_pr[T], 1);
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                int read_ctr = 0, write_ctr = 0;
+                uint64_t start_time = now_us();
+                uint64_t now_time;
+                for (int i = 1; i <= n_message; ++i) {
+                    if (i % 5000 == 0) cerr << i << endl;
+                    now_time = now_us();
+                    while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
+                        std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+                        now_time = now_us();
+                    }
+                    if (SWI) {
+                        ++write_ctr;
+                        w_send_time[write_ctr] = now_us();
+                        wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);
+                    } else {
+                        ++read_ctr;
+                        r_send_time[read_ctr] = now_us();
+                        wanagent.wansender->send_read_req(&RRC);
+                    }
+                }
+                while ((write_ctr != write_recv_cnt) || (read_ctr != read_recv_cnt)) {}
+                check_out(read_ctr, write_ctr, SWI ? w_name[T] : r_name[T], SWI);
+                std::cout << ' ';
+                wanagent.wansender->wait();
             }
+            std::cout << endl;
         }
+        fclose(stdout);
+    }
         std::cout << "Done send messages." << std::endl;
-        // wait till end
-        // while (all_received == false)
-        // {
-            // std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
-        // }
-        // std::cout << "Send finished." << std::endl;
         std::cout << "Press ENTER to kill." << std::endl;
         std::cin.get();
-        print_statistics(time_keeper, number_of_messages, message_size);
         
         wanagent.shutdown_and_wait();
-        free(payload);
         free(time_keeper);
     }
 

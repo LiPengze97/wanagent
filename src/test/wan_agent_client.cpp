@@ -132,12 +132,12 @@ int main(int argc, char** argv) {
         }
     };
 
-    wan_agent::ReadRecvCallback RRC_1 = [](const uint64_t version, const site_id_t site, Blob&& obj) {
-        std::cerr << "Read: 1 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + std::to_string(site) + '\n';
+    wan_agent::ReadRecvCallback RRC_1 = [](const uint64_t version, Blob&& obj) {
+        std::cerr << "Read: 1 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + '\n';
     };
 
-    wan_agent::ReadRecvCallback RRC_2 = [](const uint64_t version, const site_id_t site, Blob&& obj) {
-        std::cerr << "Read: 2 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + std::to_string(site) + '\n';
+    wan_agent::ReadRecvCallback RRC_2 = [](const uint64_t version, Blob&& obj) {
+        std::cerr << "Read: 2 Receive Object of version = " + std::to_string(version) + " obj = " + std::string(obj.bytes) + " from site = " + '\n';
     };
 
     wan_agent::WanAgentSender wan_agent_sender(conf, pl);

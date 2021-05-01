@@ -11,14 +11,14 @@ target_include_directories(wan_agent_server PUBLIC
 )
 target_link_libraries(wan_agent_server wan_agent pthread mutils derecho crypto)
 
-add_executable(wan_agent_client wan_agent_client.cpp
-)
-target_include_directories(wan_agent_client PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-)
-target_link_libraries(wan_agent_client wan_agent)
+#add_executable(wan_agent_client wan_agent_client.cpp
+#)
+#target_include_directories(wan_agent_client PUBLIC
+#    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
+#    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+#    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+#)
+#target_link_libraries(wan_agent_client wan_agent)
 
 add_executable(wan_agent_complete wan_agent.cpp
 )
@@ -28,12 +28,3 @@ target_include_directories(wan_agent_complete PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_link_libraries(wan_agent_complete wan_agent)
-
-add_executable(pub_sub pub_sub.cpp
-)
-target_include_directories(pub_sub PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-)
-target_link_libraries(pub_sub wan_agent readline)
