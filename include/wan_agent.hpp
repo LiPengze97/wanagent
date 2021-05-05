@@ -184,13 +184,16 @@ private:
     const WanAgent* hugger;
 
     // use epoll to get message from senders.
-
+    // socc var
+    uint64_t all_start_time = 0, last_message_time = 0;
+    int total_msg = 0, receive_cnt = 0, msg_size = -1;
 public:
     RemoteMessageService(const site_id_t local_site_id,
                          int num_senders,
                          unsigned short local_port,
                          const size_t max_payload_size,
                          const RemoteMessageCallback& rmc,
+                         int msg_num,
                          WanAgent* hugger);
 
     void establish_connections();

@@ -102,14 +102,16 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
                                            unsigned short local_port,
                                            const size_t max_payload_size,
                                            const RemoteMessageCallback& rmc,
+                                           int msg_num,
                                            WanAgent* hugger)
         : local_site_id(local_site_id),
           num_senders(num_senders),
           max_payload_size(max_payload_size),
           rmc(rmc),
+          total_msg(msg_num),
           hugger(hugger) {
     std::cout << "1: " << local_site_id << std::endl;
-    std::cout << "2" << std::endl;
+    std::cout << "2: " << total_msg << std::endl;
     sockaddr_in serv_addr;
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if(fd < 0)
@@ -219,9 +221,20 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
                     if(!success)
                         throw std::runtime_error("Failed to receive object");
+                    receive_cnt++;
+                    if(all_start_time == 0){
+                        all_start_time = get_time_us();
+                        msg_size = header.payload_size;
+                    }
+                    last_message_time = get_time_us();
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
+                if(total_msg == receive_cnt){
+                    double total_time = (last_message_time-all_start_time)/1000000.0;
+                    std::cout << receive_cnt << " msg" << "\n";
+                    std::cout << receive_cnt/total_time <<" msg/s"<< msg_size*8*receive_cnt/total_time/1024/1024 << " Mbit/s"<<"\n";
+                }
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
                 if (header.requestType == 0) { // read request
@@ -247,6 +260,7 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                   local_port,
                   wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
                   rmc,
+                  wan_group_config["message_num"],
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();

@@ -226,8 +226,8 @@ int main(int argc, char** argv) {
     
     string obj = "";
     for (int i = 1; i <= 5000; ++i) obj += 'a';
-
-    for (SWI = 0; SWI <= 1; ++SWI) {
+    SWI = 1;
+    // for (SWI = 0; SWI <= 1; ++SWI) {
         std::cerr << "TESTING ON " << (SWI ? "WRITE" : "READ") << std::endl;
         if (!SWI) {
             //warm up
@@ -241,13 +241,13 @@ int main(int argc, char** argv) {
 
         if (SWI) freopen("write.log", "w", stdout);
         else freopen("read.log", "w", stdout);
-
-        for (int T = 0; T < 4; ++T) {
-            std::cerr << "TEST CASE = " << T << std::endl;
+        int T = 0;
+        // for (int T = 0; T < 4; ++T) {
+            // std::cerr << "TEST CASE = " << T << std::endl;
             int st = (SWI ? 2000 : 800);
             int ed = (SWI ? 10000 : 1400);
             int dt = (SWI ? 2000 : 200);
-            std::cout << T << ' ';
+            // std::cout << T << ' ';
             for (int parm = st; parm <= ed; parm += dt) {
                 (SWI ? MESSAGE_SIZE = parm : MESSAGE_SIZE = 5000);
                 (SWI ? expected_mps = (int)1e6 : expected_mps = parm);
@@ -290,9 +290,9 @@ int main(int argc, char** argv) {
                 wan_agent_sender.wait();
             }
             std::cout << endl;
-        }
+        // }
         fclose(stdout);
-    }
+    // }
 //    std::cerr << "hi" << std::endl;
 //    std::this_thread::sleep_for(std::chrono::seconds(1));
 //    wan_agent_sender.shutdown_and_wait();
