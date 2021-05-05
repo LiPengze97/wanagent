@@ -188,13 +188,16 @@ namespace wan_agent
         const WanAgentAbstract *hugger;
 
         // use epoll to get message from senders.
-
+        // socc var
+        uint64_t all_start_time = 0, last_message_time = 0;
+        int total_msg = 0, receive_cnt = 0, msg_size = -1;
     public:
         RemoteMessageService(const site_id_t local_site_id,
                              int num_senders,
                              unsigned short local_port,
                              const size_t max_payload_size,
                              const RemoteMessageCallback &rmc,
+                             int msg_num,
                              WanAgentAbstract *hugger);
 
         void establish_connections();
@@ -314,20 +317,21 @@ namespace wan_agent
 
         std::atomic<bool> thread_shutdown;
         const int N_MSG = 520000;
-
+        const int SMALL_N_MSG = 520000;
         int nServer;
         uint64_t max_version = 0;
-
+        
         std::map<uint64_t, ReadRecvCallback*> read_callback_store;
         std::map<uint64_t, WriteRecvCallback*> write_callback_store;
         
     public:
+        int ack_cnt = 0;
         std::vector<pre_operation> operations;
         // uint64_t *buffer_size = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
         uint64_t *leave_queue_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * 7 * N_MSG));
         /**all sf for each msg**/
         uint64_t *sf_arrive_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * 6 * N_MSG));
-        // uint64_t *ack_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * 10 ));
+        uint64_t *ack_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * 4 * SMALL_N_MSG));
         uint64_t *enter_queue_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
         // wait for certaion stability frontier
         int stability_frontier = 0;

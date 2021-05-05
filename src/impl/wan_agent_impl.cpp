@@ -102,14 +102,16 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
                                            unsigned short local_port,
                                            const size_t max_payload_size,
                                            const RemoteMessageCallback& rmc,
+                                           int msg_num,
                                            WanAgentAbstract* hugger)
         : local_site_id(local_site_id),
           num_senders(num_senders),
           max_payload_size(max_payload_size),
           rmc(rmc),
+          total_msg(msg_num),
           hugger(hugger) {
     std::cout << "1: " << local_site_id << std::endl;
-    std::cout << "2" << std::endl;
+    std::cout << "2: " << total_msg << std::endl;
     sockaddr_in serv_addr;
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if(fd < 0)
@@ -202,10 +204,9 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
         throw std::runtime_error("failed to create epoll fd");
     add_epoll(epoll_fd_recv_msg, EPOLLIN, connected_sock_fd);
 
-    std::cout << "The connected_sock_fd is " << connected_sock_fd << std::endl;
+    // std::cout << "The connected_sock_fd is " << connected_sock_fd << std::endl;
 
     struct epoll_event events[EPOLL_MAXEVENTS];
-    std::cout << "000000 " +std::to_string(local_site_id) + "\n";
     while(!hugger->get_is_shutdown()) {
         int n = epoll_wait(epoll_fd_recv_msg, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
@@ -220,11 +221,22 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
                     if(!success)
                         throw std::runtime_error("Failed to receive object");
+                    receive_cnt++;
+                    if(all_start_time == 0){
+                        all_start_time = get_time_us();
+                        msg_size = header.payload_size;
+                    }
+                    last_message_time = get_time_us();
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, version_obj.first, header.seq, local_site_id});
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
                 std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
+                if(total_msg == receive_cnt){
+                    double total_time = (last_message_time-all_start_time)/1000000.0;
+                    std::cout << receive_cnt << " msg" << "\n";
+                    std::cout << receive_cnt/total_time <<" msg/s"<< msg_size*8*receive_cnt/total_time/1024/1024 << " Mbit/s"<<"\n";
+                }
                 if (header.version != -1 && version_obj.first != header.version)
                     throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
@@ -252,6 +264,7 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                   local_port,
                   wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
                   rmc,
+                  wan_group_config["message_num"],
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();
@@ -401,13 +414,15 @@ void MessageSender::recv_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
-                "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
+                // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
+                // "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
+                ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
                 message_counters[res.site_id]++;
-                uint64_t pre_cal_st_time = get_time_us();
+                // uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
                 std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
-                transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
+                // transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
+                
                 // if(res.seq == wait_target_sf) {
                 //     ack_keeper[res.site_id - 1000] = get_time_us();
                 // }
@@ -528,20 +543,20 @@ void MessageSender::predicate_calculation() {
     // }
 
     /**record every message arrive to see each file's performance**/
-    int predicate_idx = 6;
-    for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
-        int tmp_val = it->second(5, arr);
-        int tmp_sf = pair_ve[tmp_val - 1].second;
-        if(tmp_sf > 0 && sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] == 0) {
-            sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] = get_time_us();
-        }
-        // if(tmp_sf > 0 && it->first == "MAX_NODE" && who_is_max[tmp_sf] == 0) {
-        //     who_is_max[tmp_sf] = pair_ve[tmp_val - 1].first;
-        // }
+    // int predicate_idx = 6;
+    // for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
+    //     int tmp_val = it->second(5, arr);
+    //     int tmp_sf = pair_ve[tmp_val - 1].second;
+    //     if(tmp_sf > 0 && sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] == 0) {
+    //         sf_arrive_time_keeper[tmp_sf * 6 - predicate_idx] = get_time_us();
+    //     }
+    //     // if(tmp_sf > 0 && it->first == "MAX_NODE" && who_is_max[tmp_sf] == 0) {
+    //     //     who_is_max[tmp_sf] = pair_ve[tmp_val - 1].first;
+    //     // }
 
-        predicate_idx--;
-    }
-    stability_frontier_arrive_cv.notify_one();
+    //     predicate_idx--;
+    // }
+    // stability_frontier_arrive_cv.notify_one();
 
     /**comparation with gccjit and none gccjit**/
     // uint64_t sf_cal_st_time = get_time_us();
@@ -648,13 +663,8 @@ uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload,
     size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
     tmp->message_size = payload_size;
-    if (!payload_size) {
-        tmp->message_body = nullptr;
-        tmp->message_size = 0;
-    } else {
-        tmp->message_body = (char*)malloc(payload_size);
-        memcpy(tmp->message_body, payload, payload_size);
-    }
+    tmp->message_body = (char*)malloc(payload_size);
+    memcpy(tmp->message_body, payload, payload_size);
     tmp->message_type = requestType;
     tmp->RRC = nullptr;
     tmp->WRC = WRC;
@@ -723,14 +733,14 @@ void MessageSender::send_msg_loop() {
                 auto version = node.message_version;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
-                auto curr_seqno = version;
+                auto curr_seqno = last_sent_seqno[site_id] + 1;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
-                leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
+                // leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
                 // buffer_size[curr_seqno] = size;
 
                 last_sent_seqno[site_id] = curr_seqno;
@@ -748,16 +758,16 @@ void MessageSender::send_msg_loop() {
         // log_debug("smallest seqno in last_sent_seqno is {}", it->second);
         // dequeue from ring buffer
         // || min_element == 0 will skip the comparison with static_cast<uint64_t>(-1)
-        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second >= 0)) {
+        if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second == 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
+            assert(it->second - last_all_sent_seqno == 1);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
-            buffer_list.front().Destruct();
             buffer_list.pop_front();
             // list_lock.lock();
             size_mutex.unlock();
             // list_lock.unlock();
-            last_all_sent_seqno = it->second; //*****!!!!
+            last_all_sent_seqno++;
         }
         lock.unlock();
     }
@@ -963,14 +973,24 @@ void WanAgentSender::test_predicate() {
     log_debug("current test_predicate returned: {}", cur);
 }
 void WanAgentSender::out_out_file() {
-    std::ofstream file("./enter_leave.csv");
+    // std::ofstream file("./enter_leave.csv");
+    // if(file) {
+    //     file << "enter_time,s1,s2,s3,s4,s5,s6,s7\n";
+    //     for(int i = 0; i < message_sender->msg_idx; i++) {
+    //         file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->leave_queue_time_keeper[i * 7] << "," << message_sender->leave_queue_time_keeper[i * 7 + 1] << "," << message_sender->leave_queue_time_keeper[i * 7 + 2] << "," << message_sender->leave_queue_time_keeper[i * 7 + 3] << "," << message_sender->leave_queue_time_keeper[i * 7 + 4] << "," << message_sender->leave_queue_time_keeper[i * 7 + 5] << "," << message_sender->leave_queue_time_keeper[i * 7 + 6] << "\n";
+    //     }
+    // }
+    // file.close();
+
+    std::ofstream file("./enter_receive.csv");
     if(file) {
-        file << "enter_time,s1,s2,s3,s4,s5,s6,s7\n";
+        file << "enter_time,utah2,wisc,clme,mass\n";
         for(int i = 0; i < message_sender->msg_idx; i++) {
-            file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->leave_queue_time_keeper[i * 7] << "," << message_sender->leave_queue_time_keeper[i * 7 + 1] << "," << message_sender->leave_queue_time_keeper[i * 7 + 2] << "," << message_sender->leave_queue_time_keeper[i * 7 + 3] << "," << message_sender->leave_queue_time_keeper[i * 7 + 4] << "," << message_sender->leave_queue_time_keeper[i * 7 + 5] << "," << message_sender->leave_queue_time_keeper[i * 7 + 6] << "\n";
+            file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->ack_keeper[i * 4] << "," << message_sender->ack_keeper[i * 4 + 1] << "," << message_sender->ack_keeper[i * 4 + 2] << "," << message_sender->ack_keeper[i * 4 + 3] << "\n";
         }
     }
     file.close();
+
 
     // std::ofstream file1("./all_sf.csv");
     // if(file1) {
@@ -1035,8 +1055,7 @@ void WanAgentSender::shutdown_and_wait() {
     is_shutdown.store(true);
     // report_new_ack(); // to wake up all predicate_loop threads with a pusedo "new ack"
     // predicate_thread.join();
-    // out_out_file();
-
+    out_out_file();
     message_sender->shutdown();
     // send_msg_thread.join();
     // recv_ack_thread.join();

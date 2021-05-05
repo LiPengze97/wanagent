@@ -1,38 +1,38 @@
 {
     "version": "1.0.0",
     "transport": "tcp",
-    "private_ip": "127.0.0.1",
-    "private_port": 36003,
-    "local_site_id": 1003,
+    "private_ip": "128.110.154.124",
+    "private_port": 36000,
+    "local_site_id": 1000,
     "max_payload_size": 102400,
     "window_size": 1000,
     "message_num": 10000,
-    "predicate": "KTH_MIN($2,MAX($1,$2),$3,$4)",
+    "predicate": "MIN($1,$2,$3,$4)",
     "server_sites": [
         {
             "id": 1000,
-            "ip": "127.0.0.1",
+            "ip": "128.110.154.124",
             "port": 36000
         },
         {
             "id": 1001,
-            "ip": "127.0.0.1",
-            "port": 36001
+            "ip": "128.110.154.68",
+            "port": 36000
         },
         {
             "id": 1002,
-            "ip": "127.0.0.1",
-            "port": 36002
+            "ip": "128.105.144.19",
+            "port": 36000
         },
         {
             "id": 1003,
-            "ip": "127.0.0.1",
-            "port": 36003
+            "ip": "130.127.134.32",
+            "port": 36000
         },
         {
             "id": 1004,
-            "ip": "127.0.0.1",
-            "port": 36004
+            "ip": "198.22.255.20",
+            "port": 36000
         }
     ],
     "num_of_sender_sites": 1

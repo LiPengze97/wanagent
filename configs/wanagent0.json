@@ -6,7 +6,8 @@
     "local_site_id": 1000,
     "max_payload_size": 102400,
     "window_size": 1000,
-    "predicate": "KTH_MIN($2,MAX($1,$2),$3,$4)",
+    "message_num": 10000,
+    "predicate": "MIN($1,$2,$3,$4)",
     "server_sites": [
         {
             "id": 1000,

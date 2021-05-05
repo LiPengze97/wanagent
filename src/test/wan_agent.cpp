@@ -211,8 +211,8 @@ int main(int argc, char **argv)
             (*pblob) = std::move(Blob(msg, RH.payload_size));
             // pblob.version(cur_version);
             // seq_versions[RH.version] = cur_version;
-            assert(max_version < RH.version);
-            max_version = RH.version;
+            // assert(max_version < RH.version);
+            max_version = std::max(RH.version, max_version);
             // ++ops_ctr;
             // if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
             // for (int i = 0; i < RH.payload_size; ++i) {
