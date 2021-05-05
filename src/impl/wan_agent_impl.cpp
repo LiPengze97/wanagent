@@ -205,6 +205,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
     std::cout << "The connected_sock_fd is " << connected_sock_fd << std::endl;
 
     struct epoll_event events[EPOLL_MAXEVENTS];
+    std::cout << "000000 " +std::to_string(local_site_id) + "\n";
     while(!hugger->get_is_shutdown()) {
         int n = epoll_wait(epoll_fd_recv_msg, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
@@ -222,7 +223,8 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, version_obj.first, header.seq, local_site_id});
-                std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
+                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
+                std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
                 if (header.version != -1 && version_obj.first != header.version)
                     throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
@@ -387,7 +389,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
 void MessageSender::recv_ack_loop() {
     log_enter_func();
     auto tid = pthread_self();
-    std::cout << "recv_ack_loop start, tid = " << tid << std::endl;
+    // std::cout << "recv_ack_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
     while(!thread_shutdown.load()) {
         int n = epoll_wait(epoll_fd_recv_ack, events, EPOLL_MAXEVENTS, -1);
@@ -399,7 +401,8 @@ void MessageSender::recv_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';
+                std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
+                "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
                 message_counters[res.site_id]++;
                 uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
@@ -421,7 +424,7 @@ void MessageSender::set_read_quorum(int read_quorum){
 void MessageSender::recv_read_ack_loop() {
     log_enter_func();
     auto tid = pthread_self();
-    std::cout << "recv_read_ack_loop start, tid = " << tid << std::endl;
+    // std::cout << "recv_read_ack_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
     while(!thread_shutdown.load()) {
         int n = epoll_wait(epoll_fd_recv_read_ack, events, EPOLL_MAXEVENTS, -1);
@@ -694,7 +697,7 @@ void MessageSender::read_enqueue(const uint64_t& version, ReadRecvCallback* RRC)
 void MessageSender::send_msg_loop() {
     log_enter_func();
     auto tid = pthread_self();
-    std::cout << "send_msg_loop start, tid = " << tid << std::endl;
+    // std::cout << "send_msg_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
     while(!thread_shutdown.load()) {
         // std::cout << "in send_msg_loop, thread_shutdown.load() is " << thread_shutdown.load() << std::endl;
@@ -765,7 +768,7 @@ void MessageSender::send_msg_loop() {
 void MessageSender::read_msg_loop() {
     log_enter_func();
     auto tid = pthread_self();
-    std::cout << "read_msg_loop start, tid = " << tid << std::endl;
+    // std::cout << "read_msg_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
     while(!thread_shutdown.load()) {
         std::unique_lock<std::mutex> lock(read_mutex);
@@ -826,7 +829,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     predicate = predicate_generator->get_predicate_function();
     inverse_predicate = inverse_predicate_generator->get_predicate_function();
     std::cout << predicate_experssion << std::endl;
-    std::cout << inverse_predicate_expression << std::endl;
+    // std::cout << inverse_predicate_expression << std::endl;
     // start predicate thread.
     // predicate_thread = std::thread(&WanAgentSender::predicate_loop, this);
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
@@ -1024,9 +1027,9 @@ void WanAgentSender::out_out_file() {
 
 void WanAgentSender::shutdown_and_wait() {
     std::cout << "all done! " << get_time_us() << std::endl;
-    std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
+    // std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
     // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
-    std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
+    // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
     // std::cout << "per latency " << ((message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0) / 100000 << std::endl;
     log_enter_func();
     is_shutdown.store(true);

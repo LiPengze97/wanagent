@@ -117,7 +117,7 @@ static void print_help(const char *cmd)
 #define SLEEP_GRANULARITY_US (50)
 std::mutex all_lock;
 std::map<uint64_t, version_t> seq_versions;
-uint64_t max_version;
+uint64_t max_version = 0;
 
 int main(int argc, char **argv)
 {
@@ -127,7 +127,6 @@ int main(int argc, char **argv)
     std::size_t message_size = 0;
     std::size_t number_of_messages = 0;
     std::size_t expected_mps = 200;
-    int SWI  = 0;
 
     while ((opt = getopt(argc, argv, "c:s:i:m:n:p:")) != -1)
     {
@@ -147,9 +146,6 @@ int main(int argc, char **argv)
             break;
         case 'p':
             expected_mps = static_cast<std::size_t>(std::stol(optarg));
-            break;
-        case 't':
-            SWI = static_cast<int>(std::stoi(optarg));
             break;
         default:
             print_help(argv[0]);
@@ -199,34 +195,9 @@ int main(int argc, char **argv)
     std::atomic<int> ops_ctr = 0;
     std::atomic<int> len = 0;
     string obj = "";
+    uint64_t max_rec_version = 0;
     for (int i = 1; i <= 5000; ++i) obj += 'a';
-    std::string w_pr[4] = {
-        "MIN($1,$2,$3,$4)",
-        "MAX($1,$2,$3,$4)",
-        "KTH_MIN($2,$1,$2,$3,$4)",
-        "KTH_MIN($2,MAX($1,$2),$3,$4)",
-    };
-
-    std::string w_name[4] = {
-        "w_all",
-        "w_sig",
-        "w_maj",
-        "w_maj_reg",
-    };
-
-    std::string r_pr[4] = {
-        "MIN($1,$2,$3,$4)",
-        "MAX($1,$2,$3,$4)",
-        "KTH_MIN($3,$1,$2,$3,$4)",
-        "KTH_MIN($2,MIN($1,$2),$3,$4)",
-    };
-
-    std::string r_name[4] = {
-        "r_sig",
-        "r_all",
-        "r_maj",
-        "r_maj_reg",
-    };
+    
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
         cout << "message received from site:" << RH.site_id
              << ", message size:" << RH.payload_size << " bytes"
@@ -237,17 +208,18 @@ int main(int argc, char **argv)
             // version_t prev_version = pblob.getLatestVersion();
             // version_t cur_version = prev_version + 1;
             // cerr << "cur_version = " << cur_version << endl;
-            // (*pblob) = std::move(Blob(msg, RH.payload_size));
+            (*pblob) = std::move(Blob(msg, RH.payload_size));
             // pblob.version(cur_version);
             // seq_versions[RH.version] = cur_version;
-            // assert(max_version < RH.version);
-            ++ops_ctr;
-            if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
-            for (int i = 0; i < RH.payload_size; ++i) {
-                obj[i] = 'a';
-            }
-            obj[RH.payload_size] = '\0';
-            len = RH.payload_size;
+            assert(max_version < RH.version);
+            max_version = RH.version;
+            // ++ops_ctr;
+            // if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
+            // for (int i = 0; i < RH.payload_size; ++i) {
+            //     obj[i] = 'a';
+            // }
+            // obj[RH.payload_size] = '\0';
+            // len = RH.payload_size;
             // max_version = RH.version;
             // pblob.persist(cur_version);
             return std::make_pair(RH.version, std::move(Blob("done", 4)));
@@ -314,6 +286,10 @@ int main(int argc, char **argv)
 
     // simple test
     if(is_sender){
+        std::cout << "enter to send " << std::endl;
+        std::cin.get();
+        string send_content = "";
+        for (int i = 1; i <= message_size; ++i) send_content += 'a';
         std::atomic<int> write_recv_cnt = 0;
         std::atomic<int> read_recv_cnt = 0;
         wan_agent::WriteRecvCallback WRC = [&]() {
@@ -323,11 +299,20 @@ int main(int argc, char **argv)
             r_arrive_time[++read_recv_cnt] = now_us();
             std::cout << "receive read with version " << version <<" !!" << std::endl;
         };
-        for (int i = 1; i <= 10; ++i)
-            wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-        for (int i = 1; i <= 30; ++i)
-            wanagent.wansender->send_read_req(&RRC);
+        uint64_t start_time = now_us();
+        uint64_t now_time;
+        for (int i = 1; i <= number_of_messages; ++i){
+            now_time = now_us();
+            while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
+                std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+                now_time = now_us();
+            }
+            wanagent.wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
+        }
+            
+        // std::this_thread::sleep_for(std::chrono::seconds(5));
+        // for (int i = 1; i <= 30; ++i)
+        //     wanagent.wansender->send_read_req(&RRC);
     }
 
     // complete test
