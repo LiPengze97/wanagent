@@ -37,7 +37,7 @@ uint64_t r_arrive_time[MAXOPS] = {0};
 uint64_t tot_read_ops = 0;
 uint64_t tot_write_ops = 0;
 
-int MESSAGE_SIZE = 8000;
+int MESSAGE_SIZE = 8192;
 int n_message = 0;
 
 inline void check_out(const int read_cnt, const int write_cnt, string pf, int SWI) {
@@ -122,21 +122,17 @@ uint64_t max_version = 0;
 int main(int argc, char **argv)
 {
     int opt;
-    bool is_sender = false;
     std::string json_config;
     std::size_t message_size = 0;
     std::size_t number_of_messages = 0;
     std::size_t expected_mps = 200;
 
-    while ((opt = getopt(argc, argv, "c:s:i:m:n:p:")) != -1)
+    while ((opt = getopt(argc, argv, "c:m:n:p:")) != -1)
     {
         switch (opt)
         {
         case 'c':
             json_config = optarg;
-            break;
-        case 's':
-            is_sender = true;
             break;
         case 'm':
             message_size = static_cast<std::size_t>(std::stol(optarg));
@@ -160,8 +156,6 @@ int main(int argc, char **argv)
     uint64_t *time_keeper = nullptr;
     std::atomic<bool> all_received(false);
 
-    if (is_sender)
-    {
         std::cout << "number_of_messages = " << number_of_messages << std::endl;
         std::cout << "message_size = " << message_size << std::endl;
         if (number_of_messages <= 0 || message_size <= 0)
@@ -183,7 +177,6 @@ int main(int argc, char **argv)
         }
 
         std::cout << "time_keeper:" << time_keeper << std::endl;
-    }
 
     auto max_payload_size = conf[WAN_AGENT_MAX_PAYLOAD_SIZE];
     persistent::PersistentRegistry pr(nullptr, typeid(Blob), 0, 0);
@@ -191,7 +184,7 @@ int main(int argc, char **argv)
                                        "Pblob",
                                        &pr,
                                        false);
-    Blob latest_blob;
+
     std::atomic<int> ops_ctr = 0;
     std::atomic<int> len = 0;
     string obj = "";
@@ -208,17 +201,11 @@ int main(int argc, char **argv)
             // version_t prev_version = pblob.getLatestVersion();
             // version_t cur_version = prev_version + 1;
             // cerr << "cur_version = " << cur_version << endl;
-            // (*pblob) = std::move(Blob(msg, RH.payload_size));
-            latest_blob = std::move(Blob(msg, RH.payload_size));
-                
+            (*pblob) = std::move(Blob(msg, RH.payload_size));
             // pblob.version(cur_version);
             // seq_versions[RH.version] = cur_version;
             // assert(max_version < RH.version);
             max_version = std::max(RH.version, max_version);
-            // cout << "message received from site:" << RH.site_id
-            // << ", message size:" << RH.payload_size << ", bytes"
-            //  << ", message version:" << RH.version << ", max version: " << max_version
-            //  << endl;
             // ++ops_ctr;
             // if (ops_ctr % 5000 == 0) std::cerr << ops_ctr << std::endl;
             // for (int i = 0; i < RH.payload_size; ++i) {
@@ -242,13 +229,7 @@ int main(int argc, char **argv)
             // }
             // uint64_t cur_version = seq_versions[RH.version];
             // return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
-
-            //** pseudo-version 12345, because pure WANAgent does not have data
-            // long unsigned int tmp_version = 12345;
-            // cout << "blob size: " << latest_blob.size << std::endl;
-            return std::make_pair(max_version, latest_blob);
-            // return std::make_pair(tmp_version, std::move(Blob(obj.c_str(), len)));
-            // return std::make_pair(RH.version, std::move(Blob(obj.c_str(), len)));
+            return std::make_pair(max_version, std::move(*pblob));
         }
     };
     wan_agent::PredicateLambda pl = [&](const std::map<uint32_t, uint64_t> &table) {
@@ -293,21 +274,25 @@ int main(int argc, char **argv)
     wan_agent::WanAgent wanagent(conf, pl, rmc);
 
     // simple test
-    if(is_sender){
+        
         std::cout << "expected_mps " << expected_mps << std::endl;
-        std::cout << "enter to send " << std::endl;
-        std::cin.get();
-        string send_content = "";
-        for (int i = 1; i <= message_size; ++i) send_content += 'a';
+        // std::cout << "enter to send " << std::endl;
+        // std::cin.get();
         std::atomic<int> write_recv_cnt = 0;
         std::atomic<int> read_recv_cnt = 0;
+        int read_ctr = 0;
         wan_agent::WriteRecvCallback WRC = [&]() {
             w_arrive_time[++write_recv_cnt] = now_us();
         };
         wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
             r_arrive_time[++read_recv_cnt] = now_us();
-            // std::cout << "receive read with version " << version <<" !!" << std::endl;
+            std::cout << "receive read with version " << version <<" !!" << std::endl;
         };
+        // for (int i = 1; i <= 100; ++i){
+        //      wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);
+        // }
+        std::cout << "enter to read " << std::endl;
+        std::cin.get();
         uint64_t start_time = now_us();
         uint64_t now_time;
         for (int i = 1; i <= number_of_messages; ++i){
@@ -316,14 +301,17 @@ int main(int argc, char **argv)
                 std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_US));
                 now_time = now_us();
             }
-            wanagent.wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
-            latest_blob = Blob(send_content.c_str(), ++max_version);
+            ++read_ctr;
+            r_send_time[read_ctr] = now_us();
+            wanagent.wansender->send_read_req(&RRC);
         }
-        std::cout << "done!" << std::endl;
+        while ((read_ctr != read_recv_cnt)) {}
+        check_out(read_ctr, 0, "hi", 0);
+            
         // std::this_thread::sleep_for(std::chrono::seconds(5));
         // for (int i = 1; i <= 30; ++i)
         //     wanagent.wansender->send_read_req(&RRC);
-    }
+
 
     // complete test
     /*

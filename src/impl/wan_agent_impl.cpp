@@ -231,7 +231,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, version_obj.first, header.seq, local_site_id});
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
-                std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
+                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
                 if(total_msg == receive_cnt){
                     double total_time = (last_message_time-all_start_time)/1000000.0;
                     std::cout << receive_cnt << " msg" << "\n";
@@ -416,7 +416,7 @@ void MessageSender::recv_ack_loop() {
                 }
                 // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
                 // "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
-                ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
+                // ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
                 message_counters[res.site_id]++;
                 // uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
@@ -481,8 +481,6 @@ void MessageSender::recv_read_ack_loop() {
                         read_highest_version_keeper.erase(read_highest_version_keeper.find(res.seq));
                         read_callback_store.erase(read_callback_store.find(res.seq));
                     }
-                }else{
-                    std::cout << "discard read ACK " << std::to_string(res.seq) <<" because the read is return" << std::endl;
                 }
                 
                 
