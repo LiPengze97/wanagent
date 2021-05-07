@@ -25,7 +25,7 @@ static inline int Rand(int L, int R) {
 }
 
 #define MAX_SEND_BUFFER_SIZE (102400)
-#define SLEEP_GRANULARITY_US (50)
+#define SLEEP_US (10)
 const int MAXOPS = 1e5 + 100;
 
 uint64_t w_send_time[MAXOPS] = {0};
@@ -199,10 +199,10 @@ int main(int argc, char **argv)
     for (int i = 1; i <= 5000; ++i) obj += 'a';
     
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
-        cout << "message received from site:" << RH.site_id
-             << ", message size:" << RH.payload_size << " bytes"
-             << ", message version:" << RH.version
-             << endl;
+        // cout << "message received from site:" << RH.site_id
+        //      << ", message size:" << RH.payload_size << " bytes"
+        //      << ", message version:" << RH.version
+        //      << endl;
         if (RH.requestType == 1)
         {
             // version_t prev_version = pblob.getLatestVersion();
@@ -238,8 +238,9 @@ int main(int argc, char **argv)
             // return std::make_pair(RH.version, std::move(*(pblob.get(cur_version))));
 
             //** pseudo-version 12345, because pure WANAgent does not have data
-            long unsigned int tmp_version = 12345;
-            return std::make_pair(tmp_version, std::move(Blob(obj.c_str(), len)));
+            // long unsigned int tmp_version = 12345;
+            return std::make_pair(max_version, std::move(*pblob));
+            // return std::make_pair(tmp_version, std::move(Blob(obj.c_str(), len)));
             // return std::make_pair(RH.version, std::move(Blob(obj.c_str(), len)));
         }
     };
@@ -286,6 +287,7 @@ int main(int argc, char **argv)
 
     // simple test
     if(is_sender){
+        std::cout << "expected_mps " << expected_mps << std::endl;
         std::cout << "enter to send " << std::endl;
         std::cin.get();
         string send_content = "";
@@ -304,7 +306,7 @@ int main(int argc, char **argv)
         for (int i = 1; i <= number_of_messages; ++i){
             now_time = now_us();
             while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
-                std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_GRANULARITY_US));
+                std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_US));
                 now_time = now_us();
             }
             wanagent.wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);

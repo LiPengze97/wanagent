@@ -420,7 +420,10 @@ void MessageSender::recv_ack_loop() {
                 message_counters[res.site_id]++;
                 // uint64_t pre_cal_st_time = get_time_us();
                 predicate_calculation();
-                std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
+                if(stability_frontier == 10000){
+                    std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
+                }
+                // std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
                 // transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 
                 // if(res.seq == wait_target_sf) {
@@ -451,7 +454,7 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
+                // std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
@@ -742,7 +745,6 @@ void MessageSender::send_msg_loop() {
                     sock_write(events[i].data.fd, node.message_body, payload_size);
                 // leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
                 // buffer_size[curr_seqno] = size;
-
                 last_sent_seqno[site_id] = curr_seqno;
             }
         }
@@ -760,7 +762,7 @@ void MessageSender::send_msg_loop() {
         // || min_element == 0 will skip the comparison with static_cast<uint64_t>(-1)
         if(it->second > last_all_sent_seqno || (last_all_sent_seqno == static_cast<uint64_t>(-1) && it->second == 0)) {
             // log_info("{} has been sent to all remote sites, ", it->second);
-            assert(it->second - last_all_sent_seqno == 1);
+            // assert(it->second - last_all_sent_seqno == 1);
             // std::unique_lock<std::mutex> list_lock(list_mutex);
             size_mutex.lock();
             buffer_list.pop_front();
@@ -1046,7 +1048,7 @@ void WanAgentSender::out_out_file() {
 }
 
 void WanAgentSender::shutdown_and_wait() {
-    std::cout << "all done! " << get_time_us() << std::endl;
+    // std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
     // std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
     // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
     // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
