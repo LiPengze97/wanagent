@@ -326,6 +326,7 @@ namespace wan_agent
         
     public:
         int ack_cnt = 0;
+        double read_time_cost = 0;
         std::vector<pre_operation> operations;
         // uint64_t *buffer_size = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
         uint64_t *leave_queue_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * 7 * N_MSG));

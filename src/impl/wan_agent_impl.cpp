@@ -449,12 +449,13 @@ void MessageSender::recv_read_ack_loop() {
         for(int i = 0; i < n; i++) {
             if(events[i].events & EPOLLIN) {
                 // received ACK
+                // ack_cnt++;
                 Response res;
                 auto success = sock_read(events[i].data.fd, res);
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
-                // std::cout << "received read ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.seq) + '\n';
+                // std::cout << "received read ACK size " + std::to_string(res.payload_size) << " from " + std::to_string(res.site_id) << " seq is " + std::to_string(res.seq) << '\n';
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
@@ -464,7 +465,9 @@ void MessageSender::recv_read_ack_loop() {
                 if (!success)
                     throw std::runtime_error("Read Request: Failed receiving object version");
                 Blob cur_obj = std::move(Blob(nullptr, obj_size));
+                // uint64_t qq_time = get_time_us();
                 success = sock_read(events[i].data.fd, cur_obj.bytes, obj_size);
+                // read_time_cost += (get_time_us() - qq_time*1.0) / 1000.0;
                 if (!success)
                     throw std::runtime_error("failed receiving object for read request");
                 // if there are already read_quorum read acks, discard all future read acks.
@@ -477,6 +480,7 @@ void MessageSender::recv_read_ack_loop() {
                         }
                     }
                     if(++read_seq_counter[res.seq] == read_quorum){
+                        // std::cout << "quorum fullfilled from " + std::to_string(res.site_id) << " seq is " + std::to_string(res.seq) << '\n';
                         (*read_callback_store[res.seq])(res.version, std::move(read_highest_version_keeper[res.seq].first));
                         read_highest_version_keeper.erase(read_highest_version_keeper.find(res.seq));
                         read_callback_store.erase(read_callback_store.find(res.seq));
@@ -1051,6 +1055,7 @@ void WanAgentSender::shutdown_and_wait() {
     // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
     // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
     // std::cout << "per latency " << ((message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0) / 100000 << std::endl;
+    // std::cout << "receive " << message_sender->ack_cnt << " ack in " << message_sender->read_time_cost << " ms\n"; 
     log_enter_func();
     is_shutdown.store(true);
     // report_new_ack(); // to wake up all predicate_loop threads with a pusedo "new ack"

@@ -157,8 +157,8 @@ int main(int argc, char **argv)
     std::atomic<bool> all_received(false);
 
         std::cout << "number_of_messages = " << number_of_messages << std::endl;
-        std::cout << "message_size = " << message_size << std::endl;
-        if (number_of_messages <= 0 || message_size <= 0)
+        // std::cout << "message_size = " << message_size << std::endl;
+        if (number_of_messages <= 0)
         {
             std::cerr << "invalid argument." << std::endl;
             return -1;
@@ -286,7 +286,7 @@ int main(int argc, char **argv)
         };
         wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
             r_arrive_time[++read_recv_cnt] = now_us();
-            std::cout << "receive read with version " << version <<" !!" << std::endl;
+            // std::cout << "receive read with version " << version << "with size " << obj.size << " !!" << std::endl;
         };
         // for (int i = 1; i <= 100; ++i){
         //      wanagent.wansender->send_write_req(obj.c_str(), obj.size(), &WRC);

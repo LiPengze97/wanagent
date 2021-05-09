@@ -317,7 +317,7 @@ int main(int argc, char **argv)
                 now_time = now_us();
             }
             wanagent.wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
-            latest_blob = Blob(send_content.c_str(), ++max_version);
+            latest_blob = Blob(send_content.c_str(), send_content.size());
         }
         std::cout << "done!" << std::endl;
         // std::this_thread::sleep_for(std::chrono::seconds(5));
