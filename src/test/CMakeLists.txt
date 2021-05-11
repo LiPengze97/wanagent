@@ -37,3 +37,11 @@ target_include_directories(read_test PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_link_libraries(read_test wan_agent)
+
+add_executable(change_with_time change_with_time.cpp)
+target_include_directories(change_with_time PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(change_with_time wan_agent)

@@ -99,7 +99,7 @@ namespace wan_agent
     using RemoteMessageCallback = std::function<std::pair<uint64_t, Blob>(const RequestHeader &,
                                                                           const char *)>;
     using ReadRecvCallback = std::function<void(const uint64_t, Blob &&)>;
-    using WriteRecvCallback = std::function<void()>;
+    using WriteRecvCallback = std::function<void(const uint64_t)>;
     /**
      * The Wan Agent abstract class
      */
@@ -391,6 +391,7 @@ namespace wan_agent
         // void read_predicate_calculation();
         void wait_stability_frontier_loop(int sf);
         void sf_time_checker_loop();
+        void trigger_write_callback(const int pre_stability_frontier);
         // void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
         // void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
         // void set_stability_frontier(int sf);

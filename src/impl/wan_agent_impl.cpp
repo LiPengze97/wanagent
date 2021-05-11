@@ -416,10 +416,12 @@ void MessageSender::recv_ack_loop() {
                 }
                 // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
                 // "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
-                // ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
+                ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
                 message_counters[res.site_id]++;
                 // uint64_t pre_cal_st_time = get_time_us();
+                int pre_stability_frontier = stability_frontier;
                 predicate_calculation();
+                trigger_write_callback(pre_stability_frontier);
                 if(stability_frontier == 10000){
                     std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
                 }
@@ -433,6 +435,22 @@ void MessageSender::recv_ack_loop() {
         }
     }
     log_exit_func();
+}
+void MessageSender::trigger_write_callback(const int pre_stability_frontier){
+    if(stability_frontier != pre_stability_frontier){
+        // jump from fast predicate to slow may skip the stability frontier between
+        if(stability_frontier > pre_stability_frontier){
+            for(int j = pre_stability_frontier+1; j <= stability_frontier; j++){
+                if(write_callback_store.count(j-1) == 0) {
+                    continue;
+                }
+                (*write_callback_store[j-1])(j);
+                write_callback_store.erase(write_callback_store.find(j-1));
+            }
+        }else{// Symmetrically, slow to fast may cause flashback
+            std::cerr<<"flashback!!!"<<std::endl;
+        }
+    }
 }
 
 void MessageSender::set_read_quorum(int read_quorum){
@@ -514,7 +532,6 @@ void MessageSender::predicate_calculation() {
         pair_ve.push_back(std::make_pair(it->first, it->second.load()));
     }
     int* arr = &value_ve[0];
-
     int val = predicate(5, arr);
     stability_frontier = pair_ve[val - 1].second;
 
@@ -739,6 +756,7 @@ void MessageSender::send_msg_loop() {
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
                 auto curr_seqno = last_sent_seqno[site_id] + 1;
+                write_callback_store[curr_seqno] = node.WRC;
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
@@ -862,7 +880,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             // read_message_counters,
             [this]() {});
     // [this]() { this->report_new_ack(); });
-    generate_predicate();
+    // generate_predicate();
     recv_ack_thread = std::thread(&MessageSender::recv_ack_loop, message_sender.get());
     send_msg_thread = std::thread(&MessageSender::send_msg_loop, message_sender.get());
     recv_read_ack_thread = std::thread(&MessageSender::recv_read_ack_loop, message_sender.get());
@@ -889,10 +907,15 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     if(inplace) {
         predicate = prl;
         message_sender->predicate = predicate;
+        std::cerr << "current predicate :" << key << std::endl;
     }
     predicate_map[key] = prl;
     message_sender->predicate_map[key] = prl;
-
+    std::cerr << "----------------------------------" << std::endl;
+    for(auto it = predicate_map.begin(); it != predicate_map.end(); it++) {
+        std::cerr << "we have predicate :" << it->first << std::endl;
+    }
+    
     if(key == "Complicated") {
         std::vector<pre_operation> pre_vec(std::begin(predicate_generator->driver.operations), std::end(predicate_generator->driver.operations));
         message_sender->operations = pre_vec;
@@ -958,6 +981,7 @@ void WanAgentSender::change_predicate(std::string key) {
     if(predicate_map.find(key) != predicate_map.end()) {  // 0-success
         predicate = predicate_map[key];
         message_sender->predicate = predicate;
+        std::cerr << "change success" << std::endl;
         log_debug("change success");
     } else {  //1-error
         log_debug("change failed");

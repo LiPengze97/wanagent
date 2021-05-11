@@ -301,8 +301,8 @@ int main(int argc, char **argv)
         for (int i = 1; i <= message_size; ++i) send_content += 'a';
         std::atomic<int> write_recv_cnt = 0;
         std::atomic<int> read_recv_cnt = 0;
-        wan_agent::WriteRecvCallback WRC = [&]() {
-            w_arrive_time[++write_recv_cnt] = now_us();
+        wan_agent::WriteRecvCallback WRC = [&](const uint64_t stability_frontier) {
+            w_arrive_time[stability_frontier-1] = now_us();
         };
         wan_agent::ReadRecvCallback RRC = [&](const uint64_t version, Blob&& obj) {
             r_arrive_time[++read_recv_cnt] = now_us();
