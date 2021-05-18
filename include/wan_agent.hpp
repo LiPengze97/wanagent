@@ -317,7 +317,7 @@ namespace wan_agent
 
         std::atomic<bool> thread_shutdown;
         const int N_MSG = 520000;
-        const int SMALL_N_MSG = 15000;
+        const int SMALL_N_MSG = 60000;
         int nServer;
         uint64_t max_version = 0;
         

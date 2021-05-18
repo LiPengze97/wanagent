@@ -217,13 +217,15 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                               << "receive " << n << " messages from sender.\n";
                     throw std::runtime_error("Failed to read request header");
                 }
+                if(receive_cnt==1000 && all_start_time == 0){
+                    all_start_time = get_time_us();
+                }
                 if (header.payload_size) {
                     success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
                     if(!success)
                         throw std::runtime_error("Failed to receive object");
                     receive_cnt++;
-                    if(all_start_time == 0){
-                        all_start_time = get_time_us();
+                    if(msg_size == -1){
                         msg_size = header.payload_size;
                     }
                     last_message_time = get_time_us();
@@ -233,6 +235,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
                 if(total_msg == receive_cnt){
+                    receive_cnt -= 1000;
                     double total_time = (last_message_time-all_start_time)/1000000.0;
                     std::cout << receive_cnt << " msg" << "\n";
                     std::cout << receive_cnt/total_time <<" msg/s"<< msg_size*8*receive_cnt/total_time/1024/1024 << " Mbit/s"<<"\n";
@@ -421,10 +424,10 @@ void MessageSender::recv_ack_loop() {
                 // uint64_t pre_cal_st_time = get_time_us();
                 int pre_stability_frontier = stability_frontier;
                 predicate_calculation();
-                trigger_write_callback(pre_stability_frontier);
-                if(stability_frontier == 10000){
-                    std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
-                }
+                // trigger_write_callback(pre_stability_frontier);
+                // if(stability_frontier == 10000){
+                //     std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
+                // }
                 // std::cout << "current write stability frontier = " + std::to_string(stability_frontier) + '\n';
                 // transfer_data_cost += (get_time_us() - pre_cal_st_time) / 1000000.0;
                 
@@ -763,7 +766,7 @@ void MessageSender::send_msg_loop() {
                 sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
-                // leave_queue_time_keeper[curr_seqno * 7 + site_id - 1000] = get_time_us();
+                leave_queue_time_keeper[curr_seqno * 4 + site_id - 1001] = get_time_us();
                 // buffer_size[curr_seqno] = size;
                 last_sent_seqno[site_id] = curr_seqno;
             }
@@ -1010,14 +1013,23 @@ void WanAgentSender::out_out_file() {
     // }
     // file.close();
 
-    std::ofstream file("./enter_receive.csv");
+    std::ofstream file("./enter_leave.csv");
     if(file) {
         file << "enter_time,utah2,wisc,clme,mass\n";
         for(int i = 0; i < message_sender->msg_idx; i++) {
-            file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->ack_keeper[i * 4] << "," << message_sender->ack_keeper[i * 4 + 1] << "," << message_sender->ack_keeper[i * 4 + 2] << "," << message_sender->ack_keeper[i * 4 + 3] << "\n";
+            file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->leave_queue_time_keeper[i * 4] << "," << message_sender->leave_queue_time_keeper[i * 4 + 1] << "," << message_sender->leave_queue_time_keeper[i * 4 + 2] << "," << message_sender->leave_queue_time_keeper[i * 4 + 3] << "\n";
         }
     }
     file.close();
+
+    // std::ofstream file("./enter_receive.csv");
+    // if(file) {
+    //     file << "enter_time,utah2,wisc,clme,mass\n";
+    //     for(int i = 0; i < message_sender->msg_idx; i++) {
+    //         file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->ack_keeper[i * 4] << "," << message_sender->ack_keeper[i * 4 + 1] << "," << message_sender->ack_keeper[i * 4 + 2] << "," << message_sender->ack_keeper[i * 4 + 3] << "\n";
+    //     }
+    // }
+    // file.close();
 
 
     // std::ofstream file1("./all_sf.csv");
@@ -1079,7 +1091,6 @@ void WanAgentSender::shutdown_and_wait() {
     // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
     // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
     // std::cout << "per latency " << ((message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0) / 100000 << std::endl;
-    // std::cout << "receive " << message_sender->ack_cnt << " ack in " << message_sender->read_time_cost << " ms\n"; 
     log_enter_func();
     is_shutdown.store(true);
     // report_new_ack(); // to wake up all predicate_loop threads with a pusedo "new ack"
