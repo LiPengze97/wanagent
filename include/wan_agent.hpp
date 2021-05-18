@@ -528,6 +528,9 @@ namespace wan_agent
     public:
         wan_agent::WanAgentServer *wanserver;
         wan_agent::WanAgentSender *wansender;
+        WanAgent()
+        {
+        }
         WanAgent(const nlohmann::json &config,
                  const PredicateLambda &pl, const RemoteMessageCallback &rmc, std::string log_level = "trace")
         {

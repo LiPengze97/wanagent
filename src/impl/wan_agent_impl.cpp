@@ -119,8 +119,7 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
 
     int reuse_addr = 1;
     if(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse_addr,
-                  sizeof(reuse_addr))
-       < 0) {
+                  sizeof(reuse_addr)) < 0) {
         fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
     }
 
@@ -152,7 +151,6 @@ void RemoteMessageService::establish_connections() {
     while(worker_threads.size() < num_fd) {
         struct sockaddr_storage client_addr_info;
         socklen_t len = sizeof client_addr_info;
-
         int connected_sock_fd = ::accept(server_socket, (struct sockaddr*)&client_addr_info, &len);
         worker_threads.emplace_back(std::thread(&RemoteMessageService::epoll_worker, this, connected_sock_fd));
     }
@@ -233,7 +231,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, version_obj.first, header.seq, local_site_id});
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
-                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
+                std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
                 if(total_msg == receive_cnt){
                     receive_cnt -= 1000;
                     double total_time = (last_message_time-all_start_time)/1000000.0;
