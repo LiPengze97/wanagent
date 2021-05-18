@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <wan_agent.hpp>
+#include <string>
 
 using wan_agent::Response;
 using wan_agent::RequestHeader;
@@ -160,7 +161,8 @@ int main(int argc, char **argv)
             sock_write(events[j].data.fd, send_content.c_str(), send_content.size());
         }
     }
-    std::ofstream file("./publish_time.csv");
+    std::string file_name = "./" + std::to_string(expected_mps) + "_publish_time.csv";
+    std::ofstream file(file_name);
     if(file) {
         file << "enter_time\n";
         for(int i = 1; i <= number_of_messages; i++) {

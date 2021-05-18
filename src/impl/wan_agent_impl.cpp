@@ -175,7 +175,7 @@ void RemoteMessageService::worker(int connected_sock_fd) {
         }
         std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
         success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-        std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") + " request" + '\n';
+        // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") + " request" + '\n';
         if (header.version != -1 && version_obj.first != header.version)
             throw std::runtime_error("Receiver: something wrong with version");
         if(!success)
@@ -1011,23 +1011,23 @@ void WanAgentSender::out_out_file() {
     // }
     // file.close();
 
-    std::ofstream file("./enter_leave.csv");
-    if(file) {
-        file << "enter_time,utah2,wisc,clme,mass\n";
-        for(int i = 0; i < message_sender->msg_idx; i++) {
-            file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->leave_queue_time_keeper[i * 4] << "," << message_sender->leave_queue_time_keeper[i * 4 + 1] << "," << message_sender->leave_queue_time_keeper[i * 4 + 2] << "," << message_sender->leave_queue_time_keeper[i * 4 + 3] << "\n";
-        }
-    }
-    file.close();
-
-    // std::ofstream file("./enter_receive.csv");
+    // std::ofstream file("./enter_leave.csv");
     // if(file) {
     //     file << "enter_time,utah2,wisc,clme,mass\n";
     //     for(int i = 0; i < message_sender->msg_idx; i++) {
-    //         file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->ack_keeper[i * 4] << "," << message_sender->ack_keeper[i * 4 + 1] << "," << message_sender->ack_keeper[i * 4 + 2] << "," << message_sender->ack_keeper[i * 4 + 3] << "\n";
+    //         file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->leave_queue_time_keeper[i * 4] << "," << message_sender->leave_queue_time_keeper[i * 4 + 1] << "," << message_sender->leave_queue_time_keeper[i * 4 + 2] << "," << message_sender->leave_queue_time_keeper[i * 4 + 3] << "\n";
     //     }
     // }
     // file.close();
+
+    std::ofstream file("./enter_receive.csv");
+    if(file) {
+        file << "enter_time,utah2,wisc,clme,mass\n";
+        for(int i = 0; i < message_sender->msg_idx; i++) {
+            file << message_sender->enter_queue_time_keeper[i] << "," << message_sender->ack_keeper[i * 4] << "," << message_sender->ack_keeper[i * 4 + 1] << "," << message_sender->ack_keeper[i * 4 + 2] << "," << message_sender->ack_keeper[i * 4 + 3] << "\n";
+        }
+    }
+    file.close();
 
 
     // std::ofstream file1("./all_sf.csv");

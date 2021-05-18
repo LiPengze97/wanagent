@@ -134,8 +134,8 @@ private:
     std::string json_config;
     nlohmann::json conf;
     Blob latest_blob;
-    wan_agent::WanAgent wanagent;
 public:
+    wan_agent::WanAgent wanagent;   
     int server_socket;
     std::list<std::thread> worker_threads;
     const int epoll_max_events = 64;
@@ -243,7 +243,7 @@ public:
                                 << "receive " << n << " messages from sender.\n";
                         throw std::runtime_error("Failed to read request header");
                     }
-                    std::cout << "header.payload_size " << header.payload_size << "\n";
+                    // std::cout << "header.payload_size " << header.payload_size << "\n";
                     success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
                     wanagent.wansender->send_write_req(buffer.get(), header.payload_size, &WRC);
                     latest_blob = Blob(buffer.get(), header.payload_size);
@@ -281,6 +281,8 @@ int main(int argc, char **argv)
     Broker broker(json_config);
     std::thread rms_establish_thread(&Broker::establish_connection, &broker);
     rms_establish_thread.detach();
-    while(true);
+    std::cout << "Press ENTER to kill." << std::endl;
+    std::cin.get();
+    broker.wanagent.shutdown_and_wait();
     return 0;
 }
