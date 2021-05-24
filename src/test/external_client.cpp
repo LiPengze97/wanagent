@@ -36,7 +36,7 @@ int epoll_fd_recv_ack;
 
 void recv_ack_loop() {
     auto tid = pthread_self();
-    // std::cout << "recv_ack_loop start, tid = " << tid << std::endl;
+    std::cout << "recv_ack_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
     while(!all_shutdown) {
         int n = epoll_wait(epoll_fd_recv_ack, events, EPOLL_MAXEVENTS, -1);
@@ -44,6 +44,7 @@ void recv_ack_loop() {
             if(events[i].events & EPOLLIN) {
                 // received ACK
                 Response res;
+                std::cout << "receive a publish message!" << res.version << std::endl;
                 auto success = sock_read(events[i].data.fd, res);
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
@@ -57,7 +58,7 @@ void recv_ack_loop() {
 void send_msg_loop() {
     auto tid = pthread_self();
     struct epoll_event events[EPOLL_MAXEVENTS];
-    while(all_shutdown) {
+    while(!all_shutdown) {
         // has item on the queue to send
         int n = epoll_wait(epoll_fd_send_msg, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
@@ -141,6 +142,8 @@ int main(int argc, char **argv)
     std::cout << "new fd " << fd << std::endl;
     add_epoll(epoll_fd_send_msg, EPOLLOUT, fd);
     add_epoll(epoll_fd_recv_ack, EPOLLIN, fd);
+    auto recv_loop = std::thread(recv_ack_loop);
+    recv_loop.detach();
     std::string send_content = "";
     for (int i = 1; i <= message_size; ++i) send_content += 'a';
     struct epoll_event events[EPOLL_MAXEVENTS];

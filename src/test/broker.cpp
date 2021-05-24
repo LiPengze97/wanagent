@@ -134,6 +134,7 @@ private:
     std::string json_config;
     nlohmann::json conf;
     Blob latest_blob;
+    std::vector<int> subscribers;
 public:
     wan_agent::WanAgent wanagent;   
     int server_socket;
@@ -192,8 +193,15 @@ public:
         wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
             if (RH.requestType == 1)
             {
+                std::cout << "receive a message!!\n";
                 latest_blob = std::move(Blob(msg, RH.payload_size));
                 max_version = std::max(RH.version, max_version);
+                for(int i = 0; i < subscribers.size(); i++){
+                    bool success = sock_write(subscribers[i], Response{RH.payload_size, RH.version, RH.seq, RH.site_id});
+                    if(!success)
+                        throw std::runtime_error("Failed to send ACK message");
+                }
+
                 return std::make_pair(RH.version, std::move(Blob("done", 4)));
             }
             else
@@ -204,17 +212,19 @@ public:
             }
         };
         wan_agent::PredicateLambda pl = [&](const std::map<uint32_t, uint64_t> &table) {};
-        wanagent = std::move(wan_agent::WanAgent(conf, pl, rmc));
+        wanagent = wan_agent::WanAgent(conf, pl, rmc);
     }
 
     void establish_connection(){
         // auto num_fd = (num_senders << 1);
-        auto num_fd = 2;
+        auto num_fd = 1;
         std::cout << "try estabilish connection\n";
         while(worker_threads.size() < num_fd) {
             struct sockaddr_storage client_addr_info;
             socklen_t len = sizeof client_addr_info;
             int connected_sock_fd = ::accept(server_socket, (struct sockaddr*)&client_addr_info, &len);
+            std::cout << connected_sock_fd <<"\n";
+            subscribers.push_back(connected_sock_fd);
             worker_threads.emplace_back(std::thread(&Broker::epoll_worker, this, connected_sock_fd));
         }
     }
