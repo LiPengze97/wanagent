@@ -902,6 +902,11 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
 // }
 
 void WanAgentSender::submit_predicate(std::string key, std::string predicate_str, bool inplace) {
+    if(predicate_map.count(key)){
+        if(inplace)
+            change_predicate(key);
+        return;
+    }
     std::istringstream iss(predicate_str);
     predicate_generator = new Predicate_Generator(iss);
     predicate_fn_type prl = predicate_generator->get_predicate_function();
@@ -912,10 +917,10 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     }
     predicate_map[key] = prl;
     message_sender->predicate_map[key] = prl;
-    std::cerr << "----------------------------------" << std::endl;
-    for(auto it = predicate_map.begin(); it != predicate_map.end(); it++) {
-        std::cerr << "we have predicate :" << it->first << std::endl;
-    }
+    // std::cerr << "----------------------------------" << std::endl;
+    // for(auto it = predicate_map.begin(); it != predicate_map.end(); it++) {
+    //     std::cerr << "we have predicate :" << it->first << std::endl;
+    // }
     
     if(key == "Complicated") {
         std::vector<pre_operation> pre_vec(std::begin(predicate_generator->driver.operations), std::end(predicate_generator->driver.operations));

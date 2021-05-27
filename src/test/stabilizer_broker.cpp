@@ -149,6 +149,7 @@ private:
     int port = 0;
     int last_broad_cast_info = -1;
     std::map<site_id_t, int> subscribers;
+    std::string default_prediate;
 public:
     wan_agent::WanAgent wanagent;   
     int server_socket;
@@ -170,6 +171,7 @@ public:
                 is_broker_connected[site[WAN_AGENT_CONF_SITES_ID]] = false;
             }
         }
+        default_prediate = conf["predicate"];
         sockaddr_in serv_addr;
         int fd = ::socket(AF_INET, SOCK_STREAM, 0);
         if(fd < 0)
@@ -208,38 +210,6 @@ public:
             throw std::runtime_error("failed to create epoll fd");
         connect_to_other_brokers();
         init_wanagent();
-    }
-    
-    // generate all predicates used when broker active status changes
-    void generate_predicates(){
-        int server_num = server_sites_ip_addrs_and_ports.size() - 1;
-        int *sites = new int [server_num];
-        recursive_generate_predicates(sites, server_num, 0);
-    }
-
-    // generate all predicates bit_wise
-    void recursive_generate_predicates(int *sites, int server_num, int cur_level){
-        if(cur_level >= server_num){
-            std::string value = "MIN(";
-            int int_key = 0;
-            for(int i = 0; i < server_num; i++){
-                if(sites[i]){
-                    value += "$" + std::to_string(i+1) + ",";
-                    int_key += std::pow(2, i);
-                }
-            }
-            value = value.substr(0, value.size()-1);
-            value += ")";
-            if(int_key){
-                predicates[std::to_string(int_key)] = value;
-            }
-            // std::cout<< "key : " << int_key << ",value : " << value << std::endl;
-            return;
-        }
-        sites[cur_level] = 0;
-        recursive_generate_predicates(sites, server_num, cur_level+1);
-        sites[cur_level] = 1;
-        recursive_generate_predicates(sites, server_num, cur_level+1);
     }
 
     void broadcast_subscribe_info(int active_status){
@@ -306,16 +276,24 @@ public:
         int int_key = 0;
         std::string value = "MIN(";
         int i = 0;
+        // tmp use count
+        int count = 0;
         for(auto iter = active_broker.begin(); iter != active_broker.end(); iter++){
             std::cout << iter->first << ", " << iter->second << std::endl;
             if(iter->second){
                 value += "$" + std::to_string(i+1) + ",";
                 int_key += std::pow(2, i);
+                count++;
             }
             i++;
         }
         value = value.substr(0, value.size()-1);
         value += ")";
+        if(!int_key || count <= 1){
+            // temporarily set the default predicate in json when no subscriber
+            value = default_prediate;
+        }
+        wanagent.wansender->submit_predicate(std::to_string(int_key), value, true);
         std::cout<< "key : " << int_key << ",value : " << value << std::endl;
     }
 
@@ -442,7 +420,7 @@ public:
                             printf("publish \n");
                             std::cout << "header.payload_size " << header.payload_size << "\n";
                             success = sock_read(sockfd, buffer.get(), header.payload_size);
-                            // wanagent.wansender->send_write_req(buffer.get(), header.payload_size, &WRC);
+                            wanagent.wansender->send_write_req(buffer.get(), header.payload_size, &WRC);
                             latest_blob = Blob(buffer.get(), header.payload_size);
                             if(!success)
                             throw std::runtime_error("Failed to receive object");
