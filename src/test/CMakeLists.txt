@@ -61,3 +61,11 @@ target_include_directories(external_client PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 target_link_libraries(external_client wan_agent)
+
+add_executable(stabilizer_broker stabilizer_broker.cpp)
+target_include_directories(stabilizer_broker PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+)
+target_link_libraries(stabilizer_broker wan_agent)

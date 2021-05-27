@@ -86,12 +86,13 @@ int main(int argc, char **argv)
 
     int opt;
     bool is_sender = false;
+    int port = 0;
     std::string json_config;
     std::size_t message_size = 0;
     std::size_t number_of_messages = 0;
     std::size_t expected_mps = 200;
 
-    while ((opt = getopt(argc, argv, "c:s:i:m:n:p:")) != -1)
+    while ((opt = getopt(argc, argv, "m:n:p:q")) != -1)
     {
         switch (opt)
         {
@@ -104,6 +105,9 @@ int main(int argc, char **argv)
         case 'p':
             expected_mps = static_cast<std::size_t>(std::stol(optarg));
             break;
+        case 'q':
+            port = static_cast<std::size_t>(std::stoi(optarg));
+            break;
         default:
             print_help(argv[0]);
             return -1;
@@ -115,7 +119,12 @@ int main(int argc, char **argv)
         return 0;
     }
     std::cout << "expected mps: " << expected_mps << ", message size: " << message_size << ", number of messages: " << number_of_messages << "\n";
-    std::pair<std::string, uint16_t> ip_port = std::make_pair("127.0.0.1", 38000);
+    
+    if(!port){
+        port = 38000;
+    }
+
+    std::pair<std::string, uint16_t> ip_port = std::make_pair("127.0.0.1", port);
     epoll_fd_send_msg = epoll_create1(0);
     if(epoll_fd_send_msg == -1)
         throw std::runtime_error("failed to create epoll fd");
@@ -151,6 +160,19 @@ int main(int argc, char **argv)
     std::cin.get();
     uint64_t start_time = now_us();
     uint64_t now_time;
+    // request_type 2 is subscribe
+    // request_type 3 is unsubscribe
+    // request_type 4 is publish
+    // request_type 5 is broker
+
+    // subscribe
+    uint32_t request_type = 2;
+    uint32_t user_id = 1;
+    sock_write(fd, RequestHeader{request_type, 0, 0, user_id, 0});
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    sock_write(fd, RequestHeader{request_type, 0, 0, user_id, 0});
+    // publish
+    request_type = 4;
     for (int i = 1; i <= number_of_messages; ++i){
         int n = epoll_wait(epoll_fd_send_msg, events, EPOLL_MAXEVENTS, -1);
         for(int j = 0; j < n; j++) {
@@ -160,19 +182,26 @@ int main(int argc, char **argv)
                 now_time = now_us();
             }
             w_send_time[i] = now_us();
-            sock_write(events[j].data.fd, RequestHeader{1, 2, 3, 4, message_size});
+            
+            sock_write(events[j].data.fd, RequestHeader{request_type, 2, 3, 4, message_size});
             sock_write(events[j].data.fd, send_content.c_str(), send_content.size());
         }
     }
-    std::string file_name = "./" + std::to_string(expected_mps) + "_publish_time.csv";
-    std::ofstream file(file_name);
-    if(file) {
-        file << "enter_time\n";
-        for(int i = 1; i <= number_of_messages; i++) {
-            file << w_send_time[i] << "\n";
-        }
-    }
-    file.close();
+
+    // unsubscribe
+    request_type = 3;
+    sock_write(fd, RequestHeader{request_type, 0, 0, user_id, 0});
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    sock_write(fd, RequestHeader{request_type, 0, 0, user_id, 0});
+    // std::string file_name = "./" + std::to_string(expected_mps) + "_publish_time.csv";
+    // std::ofstream file(file_name);
+    // if(file) {
+    //     file << "enter_time\n";
+    //     for(int i = 1; i <= number_of_messages; i++) {
+    //         file << w_send_time[i] << "\n";
+    //     }
+    // }
+    // file.close();
     while(true);
     return 0;
 }
