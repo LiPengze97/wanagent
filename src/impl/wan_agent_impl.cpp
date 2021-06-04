@@ -103,12 +103,14 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
                                            const size_t max_payload_size,
                                            const RemoteMessageCallback& rmc,
                                            int msg_num,
+                                           const nlohmann::json& wan_group_config,
                                            WanAgentAbstract* hugger)
         : local_site_id(local_site_id),
           num_senders(num_senders),
           max_payload_size(max_payload_size),
           rmc(rmc),
           total_msg(msg_num),
+          config(wan_group_config),
           hugger(hugger) {
     std::cout << "1: " << local_site_id << std::endl;
     std::cout << "2: " << total_msg << std::endl;
@@ -142,6 +144,7 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
     listen(fd, 5);
     server_socket = fd;
     std::cout << "RemoteMessageService listening on " << local_port << std::endl;
+    init_message_status_counter();
     // dbg_default_info("RemoteMessageService listening on {} ...", local_port);
 };
 
@@ -156,38 +159,26 @@ void RemoteMessageService::establish_connections() {
     }
 }
 
-void RemoteMessageService::worker(int connected_sock_fd) {
-    RequestHeader header;
-    bool success;
-    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
-    std::cout << "worker start" << std::endl;
-    while(1) {
-        if(connected_sock_fd < 0)
-            throw std::runtime_error("connected_sock_fd closed!");
+std::string RemoteMessageService::prepare_reply(){
+    json j;
+    for(auto iter = message_status.begin(); iter != message_status.end(); iter++){
+        j[iter->first] = iter->second.load();
+    }
+    return j.dump();
+}
 
-        success = sock_read(connected_sock_fd, header);
-        if(!success)
-            throw std::runtime_error("Failed to read request header");
-        if (header.payload_size) {
-            success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
-            if(!success)
-                throw std::runtime_error("Failed to receive object");
-        }
-        std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
-        success = sock_write(connected_sock_fd, Response{version_obj.second.size, header.version, header.seq, local_site_id});
-        // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") + " request" + '\n';
-        if (header.version != -1 && version_obj.first != header.version)
-            throw std::runtime_error("Receiver: something wrong with version");
-        if(!success)
-            throw std::runtime_error("Failed to send ACK message");
-        if (header.requestType == 0) { // read request
-            success = sock_write(connected_sock_fd, version_obj.first);
-            if (!success)
-                throw std::runtime_error("Failed to send version");
-            success = sock_write(connected_sock_fd, version_obj.second.bytes, version_obj.second.size);
-            if (!success)
-                throw std::runtime_error("Failed to send all the bytes");
-        }
+void RemoteMessageService::update_message_status(std::string key){
+    // message_status[key]++;
+
+    // tmp update all
+    for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
+        message_status[predicate_tmp["key"]]++;
+    }
+}
+
+void RemoteMessageService::init_message_status_counter(){
+    for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
+        message_status[predicate_tmp["key"]] = 0;
     }
 }
 
@@ -195,7 +186,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
     RequestHeader header;
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
     bool success;
-    std::cout << "epoll_worker start\n";
+    // std::cout << "epoll_worker start\n";
 
     int epoll_fd_recv_msg = epoll_create1(0);
     if(epoll_fd_recv_msg == -1)
@@ -229,15 +220,20 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     last_message_time = get_time_us();
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
-                success = sock_write(connected_sock_fd, Response{version_obj.second.size, version_obj.first, header.seq, local_site_id});
+                update_message_status("test");
+                std::string json_reply = prepare_reply();
+                success = sock_write(connected_sock_fd, Response{version_obj.second.size, json_reply.size(),version_obj.first, header.seq, local_site_id});
+
+                // the json reply
+                success = sock_write(connected_sock_fd, json_reply.c_str(), json_reply.size());
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
-                if(total_msg == receive_cnt){
-                    receive_cnt -= 1000;
-                    double total_time = (last_message_time-all_start_time)/1000000.0;
-                    std::cout << receive_cnt << " msg" << "\n";
-                    std::cout << receive_cnt/total_time <<" msg/s"<< msg_size*8*receive_cnt/total_time/1024/1024 << " Mbit/s"<<"\n";
-                }
+                // if(total_msg == receive_cnt){
+                //     receive_cnt -= 1000;
+                //     double total_time = (last_message_time-all_start_time)/1000000.0;
+                //     std::cout << receive_cnt << " msg" << "\n";
+                //     std::cout << receive_cnt/total_time <<" msg/s"<< msg_size*8*receive_cnt/total_time/1024/1024 << " Mbit/s"<<"\n";
+                // }
                 if (header.version != -1 && version_obj.first != header.version)
                     throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
@@ -255,6 +251,8 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
     }
 }
 
+
+
 WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                                const RemoteMessageCallback& rmc, std::string log_level)
         : WanAgentAbstract(wan_group_config, log_level),
@@ -266,6 +264,7 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                   wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
                   rmc,
                   wan_group_config["message_num"],
+                  wan_group_config,
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();
@@ -287,6 +286,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
                              const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                              const size_t& n_slots, const size_t& max_payload_size,
                              std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
+                             std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types,
                             //  std::map<site_id_t, std::atomic<uint64_t>>& read_message_counters,
                              const ReportACKFunc& report_new_ack)
         : local_site_id(local_site_id),
@@ -294,6 +294,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
           last_all_sent_seqno(static_cast<uint64_t>(-1)),
           R_last_all_sent_seqno(static_cast<uint64_t>(-1)),
           message_counters(message_counters),
+          message_counters_for_types(message_counters_for_types),
         //   read_message_counters(read_message_counters),
           report_new_ack(report_new_ack),
           thread_shutdown(false) {
@@ -405,6 +406,7 @@ void MessageSender::recv_ack_loop() {
     auto tid = pthread_self();
     // std::cout << "recv_ack_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(65536);
     while(!thread_shutdown.load()) {
         int n = epoll_wait(epoll_fd_recv_ack, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
@@ -415,13 +417,21 @@ void MessageSender::recv_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving ACK message");
                 }
+                auto json_size = res.json_reply_size;
+                success = sock_read(events[i].data.fd, buffer.get(), res.json_reply_size);
+                if (!success) {
+                    throw std::runtime_error("failed receiving json reply");
+                }
+                json json_reply = json::parse(std::string(buffer.get()));
+                update_predicate_counter(json_reply, res.site_id);
                 // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
                 // "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
-                ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
+                // ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
                 message_counters[res.site_id]++;
                 // uint64_t pre_cal_st_time = get_time_us();
                 int pre_stability_frontier = stability_frontier;
-                predicate_calculation();
+                predicate_calculation_multi();
+                // predicate_calculation();
                 // trigger_write_callback(pre_stability_frontier);
                 // if(stability_frontier == 10000){
                 //     std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
@@ -437,6 +447,13 @@ void MessageSender::recv_ack_loop() {
     }
     log_exit_func();
 }
+
+void MessageSender::update_predicate_counter(json json_reply, site_id_t site_id){
+    for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
+        message_counters_for_types[it.key()][site_id] = it.value();
+    }
+}
+
 void MessageSender::trigger_write_callback(const int pre_stability_frontier){
     if(stability_frontier != pre_stability_frontier){
         // jump from fast predicate to slow may skip the stability frontier between
@@ -463,6 +480,7 @@ void MessageSender::recv_read_ack_loop() {
     auto tid = pthread_self();
     // std::cout << "recv_read_ack_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
+    std::unique_ptr<char[]> buffer = std::make_unique<char[]>(65536);
     while(!thread_shutdown.load()) {
         int n = epoll_wait(epoll_fd_recv_read_ack, events, EPOLL_MAXEVENTS, -1);
         for(int i = 0; i < n; i++) {
@@ -475,6 +493,14 @@ void MessageSender::recv_read_ack_loop() {
                     throw std::runtime_error("failed receiving ACK message");
                 }
                 // std::cout << "received read ACK size " + std::to_string(res.payload_size) << " from " + std::to_string(res.site_id) << " seq is " + std::to_string(res.seq) << '\n';
+                auto json_size = res.json_reply_size;
+                success = sock_read(events[i].data.fd, buffer.get(), res.json_reply_size);
+                if (!success) {
+                    throw std::runtime_error("failed receiving json reply");
+                }
+                json json_reply = json::parse(std::string(buffer.get()));
+                update_predicate_counter(json_reply, res.site_id);
+
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
                     throw std::runtime_error("Read Request: Received an empty object");
@@ -519,6 +545,25 @@ void MessageSender::recv_read_ack_loop() {
     }
 
     log_exit_func();
+}
+
+void MessageSender::predicate_calculation_multi() {
+    log_enter_func(); 
+    for(auto iter = message_counters_for_types.begin(); iter != message_counters_for_types.end(); iter++){
+        std::vector<int> value_ve;
+        std::vector<std::pair<site_id_t, uint64_t>> pair_ve;
+        value_ve.reserve(iter->second.size());
+        pair_ve.reserve(iter->second.size());
+        value_ve.push_back(0);
+        for(std::map<site_id_t, std::atomic<uint64_t>>::iterator it = iter->second.begin(); it != iter->second.end(); it++) {
+            value_ve.push_back(it->second.load());
+            pair_ve.push_back(std::make_pair(it->first, it->second.load()));
+        }
+        int* arr = &value_ve[0];
+        int val = predicate_map[iter->first](5, arr);
+        stability_frontier_for_types[iter->first] = pair_ve[val - 1].second;
+        std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
+    }
 }
 
 void MessageSender::predicate_calculation() {
@@ -589,6 +634,7 @@ void MessageSender::predicate_calculation() {
     // sf_calculation_cost += (get_time_us() - sf_cal_st_time) / 1000000.0;
     // log_exit_func();
 }
+
 
 // void MessageSender::read_predicate_calculation() {
 //     std::vector<int> value_ve;
@@ -878,10 +924,12 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             wan_group_config[WAN_AGENT_WINDOW_SIZE],  // TODO: useless after using linked list
             wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
             message_counters,
+            message_counters_for_types,
             // read_message_counters,
             [this]() {});
     // [this]() { this->report_new_ack(); });
     // generate_predicate();
+    generate_predicate(wan_group_config);
     recv_ack_thread = std::thread(&MessageSender::recv_ack_loop, message_sender.get());
     send_msg_thread = std::thread(&MessageSender::send_msg_loop, message_sender.get());
     recv_read_ack_thread = std::thread(&MessageSender::recv_read_ack_loop, message_sender.get());
@@ -902,11 +950,6 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
 // }
 
 void WanAgentSender::submit_predicate(std::string key, std::string predicate_str, bool inplace) {
-    if(predicate_map.count(key)){
-        if(inplace)
-            change_predicate(key);
-        return;
-    }
     std::istringstream iss(predicate_str);
     predicate_generator = new Predicate_Generator(iss);
     predicate_fn_type prl = predicate_generator->get_predicate_function();
@@ -931,11 +974,38 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     // test_predicate();
 }
 
+void WanAgentSender::print_predicate_map(){
+    for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
+        std::cout << it->first << std::endl;
+    }
+}
+
 void WanAgentSender::set_read_quorum(int read_quorum){
     message_sender->set_read_quorum(read_quorum);
 }
 
-void WanAgentSender::generate_predicate() {
+void WanAgentSender::generate_predicate(const nlohmann::json& config) {
+    // generate predicates for different kinds of ACK type
+    for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
+        submit_predicate(predicate_tmp["key"], predicate_tmp["value"],0);
+        init_predicate_counter(predicate_tmp["key"], config);
+        // std::cout << "key " << predicate_tmp["key"] << ",value: " << predicate_tmp["value"] << std::endl;
+    }
+    // print_predicate_map();
+}
+
+void WanAgentSender::init_predicate_counter(std::string key, const nlohmann::json& config) {
+    message_counters_for_types[key] = std::map<site_id_t, std::atomic<uint64_t>>();
+    for(const auto& pair : server_sites_ip_addrs_and_ports) {
+        if(local_site_id != pair.first) {
+            message_counters_for_types[key][message_counters[pair.first]] = 0;
+        }
+    }
+}
+
+
+
+void WanAgentSender::generate_test_predicate() {
     // origin
     // std::string predicates[6] = {
     //         "MAX($1,$2,$3,$4,$5,$6,$7)",
@@ -993,8 +1063,6 @@ void WanAgentSender::change_predicate(std::string key) {
         log_debug("change failed");
         throw std::runtime_error(key + "predicate is not found");
     }
-
-    // test_predicate();
 }
 
 void WanAgentSender::test_predicate() {
@@ -1098,7 +1166,7 @@ void WanAgentSender::shutdown_and_wait() {
     is_shutdown.store(true);
     // report_new_ack(); // to wake up all predicate_loop threads with a pusedo "new ack"
     // predicate_thread.join();
-    out_out_file();
+    // out_out_file();
     message_sender->shutdown();
     // send_msg_thread.join();
     // recv_ack_thread.join();
