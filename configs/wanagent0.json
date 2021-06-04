@@ -8,6 +8,20 @@
     "window_size": 1000,
     "message_num": 10000,
     "predicate": "MIN($1,$2,$3,$4)",
+    "predicates": [
+        {
+            "key": "received",
+            "value": "MAX($2,$3,$4,$5)"
+        },
+        {
+            "key": "persisted",
+            "value": "KTH_MIN($2,$2,$3,$4,$5)"
+        },
+        {
+            "key": "countersigned",
+            "value": "MIN($2,$3,$4,$5)"
+        }
+    ],
     "server_sites": [
         {
             "id": 1000,
