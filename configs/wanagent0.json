@@ -8,18 +8,19 @@
     "window_size": 1000,
     "message_num": 10000,
     "predicate": "MIN($1,$2,$3,$4)",
+    "az": "Wisc",
     "predicates": [
         {
             "key": "received",
-            "value": "MAX($2,$3,$4,$5)"
+            "value": "MAX($1,$2,$3,$4)"
         },
         {
             "key": "persisted",
-            "value": "KTH_MIN($2,$2,$3,$4,$5)"
+            "value": "KTH_MIN($2,$1,$2,$3,$4)"
         },
         {
             "key": "countersigned",
-            "value": "MIN($2,$3,$4,$5)"
+            "value": "MIN($1,$2,$3,$4)"
         }
     ],
     "server_sites": [
@@ -47,6 +48,20 @@
             "id": 1004,
             "ip": "127.0.0.1",
             "port": 36004
+        }
+    ],
+    "AZ_info":[
+        {
+            "name": "Utha",
+            "nodes": [1000]
+        },
+        {
+            "name": "Wisc",
+            "nodes": [1001, 1002]
+        },
+        {
+            "name": "Clme",
+            "nodes": [1003, 1004]
         }
     ],
     "num_of_sender_sites": 4

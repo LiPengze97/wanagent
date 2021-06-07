@@ -562,7 +562,7 @@ void MessageSender::predicate_calculation_multi() {
         int* arr = &value_ve[0];
         int val = predicate_map[iter->first](5, arr);
         stability_frontier_for_types[iter->first] = pair_ve[val - 1].second;
-        std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
+        // std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
     }
 }
 
@@ -951,7 +951,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
 
 void WanAgentSender::submit_predicate(std::string key, std::string predicate_str, bool inplace) {
     std::istringstream iss(predicate_str);
-    predicate_generator = new Predicate_Generator(iss);
+    predicate_generator = new Predicate_Generator(iss, config);
     predicate_fn_type prl = predicate_generator->get_predicate_function();
     if(inplace) {
         predicate = prl;
@@ -998,9 +998,10 @@ void WanAgentSender::init_predicate_counter(std::string key, const nlohmann::jso
     message_counters_for_types[key] = std::map<site_id_t, std::atomic<uint64_t>>();
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
         if(local_site_id != pair.first) {
-            message_counters_for_types[key][message_counters[pair.first]] = 0;
+            message_counters_for_types[key][pair.first] = 0;
         }
     }
+    // std::cout << key << " " << message_counters_for_types[key].size() << std::endl;
 }
 
 
