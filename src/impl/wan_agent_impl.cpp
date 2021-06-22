@@ -320,7 +320,8 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
         throw std::runtime_error("failed to create epoll fd");
 
     for(const auto& [site_id, ip_port] : server_sites_ip_addrs_and_ports) {
-        if(site_id != local_site_id) {
+        // if(site_id != local_site_id) {
+            site_id_to_rank[site_id] = site_num_count++;
             sockaddr_in serv_addr;
             int fd = ::socket(AF_INET, SOCK_STREAM, 0);
             int R_fd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -357,7 +358,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
             R_sockfd_to_server_site_id_map[R_fd] = site_id;
             last_sent_seqno.emplace(site_id, static_cast<uint64_t>(-1));
             R_last_sent_seqno.emplace(site_id, static_cast<uint64_t>(-1));
-        }
+        // }
     }
 
     nServer = message_counters.size();
@@ -423,14 +424,16 @@ void MessageSender::recv_ack_loop() {
                     throw std::runtime_error("failed receiving json reply");
                 }
                 json json_reply = json::parse(std::string(buffer.get()));
-                update_predicate_counter(json_reply, res.site_id);
-                // std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) +
+                // update_predicate_counter(json_reply, res.site_id);
+                update_predicate_counter_postfix(json_reply, res.site_id);
+                // if (res.site_id == 1000)
+                //     std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';// +
                 // "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
                 // ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
                 message_counters[res.site_id]++;
                 // uint64_t pre_cal_st_time = get_time_us();
                 int pre_stability_frontier = stability_frontier;
-                predicate_calculation_multi();
+                // predicate_calculation_multi();
                 // predicate_calculation();
                 // trigger_write_callback(pre_stability_frontier);
                 // if(stability_frontier == 10000){
@@ -452,6 +455,13 @@ void MessageSender::update_predicate_counter(json json_reply, site_id_t site_id)
     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
         message_counters_for_types[it.key()][site_id] = it.value();
     }
+}
+
+void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t site_id){
+    for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
+        arr_message_counter[ack_type_id[it.key()] * 16 + site_id_to_rank[site_id] ] = it.value();
+    }
+    print_arr_msg_counter();
 }
 
 void MessageSender::trigger_write_callback(const int pre_stability_frontier){
@@ -566,6 +576,26 @@ void MessageSender::predicate_calculation_multi() {
     }
 }
 
+
+void MessageSender::predicate_calculation_postfix() {
+    // log_enter_func(); 
+    // for(auto iter = message_counters_for_types.begin(); iter != message_counters_for_types.end(); iter++){
+    //     std::vector<int> value_ve;
+    //     std::vector<std::pair<site_id_t, uint64_t>> pair_ve;
+    //     value_ve.reserve(iter->second.size());
+    //     pair_ve.reserve(iter->second.size());
+    //     value_ve.push_back(0);
+    //     for(std::map<site_id_t, std::atomic<uint64_t>>::iterator it = iter->second.begin(); it != iter->second.end(); it++) {
+    //         value_ve.push_back(it->second.load());
+    //         pair_ve.push_back(std::make_pair(it->first, it->second.load()));
+    //     }
+    //     int* arr = &value_ve[0];
+    //     int val = predicate_map[iter->first](5, arr);
+    //     stability_frontier_for_types[iter->first] = pair_ve[val - 1].second;
+    //     // std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
+    // }
+}
+
 void MessageSender::predicate_calculation() {
     log_enter_func();
     std::vector<int> value_ve;
@@ -585,10 +615,10 @@ void MessageSender::predicate_calculation() {
     if((stability_frontier + 1) % 5000 == 0) {
         std::cout << stability_frontier << std::endl;
     //     sf_arrive_time_map[stability_frontier] = get_time_us();
-    //     for(int i = 1; i < (int)value_ve.size(); i++) {
-    //         std::cout << arr[i] << " ";
-    //     }
-    //     std::cout << std::endl;
+        // for(int i = 1; i < (int)value_ve.size(); i++) {
+        //     std::cout << arr[i] << " ";
+        // }
+        // std::cout << std::endl;
     //     all_sf_situation[all_sf_tics * 7] = get_time_us();
     //     int tmp_idx = 1;
     //     for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
@@ -912,10 +942,10 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     // start predicate thread.
     // predicate_thread = std::thread(&WanAgentSender::predicate_loop, this);
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
-        if(local_site_id != pair.first) {
+        // if(local_site_id != pair.first) {
             message_counters[pair.first] = 0;
             // read_message_counters[pair.first] = 0;
-        }
+        // }
     }
 
     message_sender = std::make_unique<MessageSender>(
@@ -997,9 +1027,9 @@ void WanAgentSender::generate_predicate(const nlohmann::json& config) {
 void WanAgentSender::init_predicate_counter(std::string key, const nlohmann::json& config) {
     message_counters_for_types[key] = std::map<site_id_t, std::atomic<uint64_t>>();
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
-        if(local_site_id != pair.first) {
+        // if(local_site_id != pair.first) {
             message_counters_for_types[key][pair.first] = 0;
-        }
+        // }
     }
     // std::cout << key << " " << message_counters_for_types[key].size() << std::endl;
 }

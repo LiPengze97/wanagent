@@ -319,6 +319,24 @@ namespace wan_agent
 
         std::map<site_id_t, std::atomic<uint64_t>> &message_counters;
         std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types;
+
+        int arr_message_counter[96] = {0};
+        std::map<site_id_t, int> site_id_to_rank;
+        int site_num_count = 1;
+        std::map<std::string, int> ack_type_id = {
+            {"received", 0}, {"persisted", 1}, {"processed", 2},
+            {"ud1", 3}, {"ud2", 4}, {"ud3", 5}
+        };
+
+
+        void print_arr_msg_counter(){
+            for(int i = 0; i < 3; i++){
+                for(int j = 0; j < 16; j++){
+                    printf("%d ", arr_message_counter[i*16 + j]);
+                }
+                printf("\n");
+            }
+        }
         // std::map<site_id_t, std::atomic<uint64_t>> &read_message_counters;
 
         // record the higest version for each read operation.
@@ -352,7 +370,6 @@ namespace wan_agent
         std::map<std::string, int> stability_frontier_for_types;
         uint64_t read_stability_frontier = (uint64_t)0;
         // uint64_t *who_is_max = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
-        // wait for what sf?
         int wait_target_sf = -1;
         int test_arr[11] = {0, 3, 7, 1, 5, 4, 2, 8, 6, 0, 9};
         // uint64_t* all_sf_situation = static_cast<uint64_t*>(malloc(sizeof(uint64_t) * 40000));
@@ -403,11 +420,13 @@ namespace wan_agent
         void read_msg_loop();
         void predicate_calculation();
         void predicate_calculation_multi();
+        void predicate_calculation_postfix();
         void set_read_quorum(int read_quorum);
         // void read_predicate_calculation();
         void wait_stability_frontier_loop(int sf);
         void sf_time_checker_loop();
         void update_predicate_counter(json json_reply, site_id_t site_id);
+        void update_predicate_counter_postfix(json json_reply, site_id_t site_id);
         void trigger_write_callback(const int pre_stability_frontier);
         // void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
         // void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
