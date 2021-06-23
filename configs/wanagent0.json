@@ -8,6 +8,7 @@
     "window_size": 1000,
     "message_num": 10000,
     "predicate": "MIN($1,$2,$3,$4)",
+    "new_predicate": "MIN($ALLNODES)",
     "az": "Wisc",
     "predicates": [
         {
@@ -19,7 +20,7 @@
             "value": "KTH_MIN($2,$1,$2,$3,$4)"
         },
         {
-            "key": "countersigned",
+            "key": "processed",
             "value": "MIN($1,$2,$3,$4)"
         }
     ],

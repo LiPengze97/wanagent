@@ -367,6 +367,7 @@ namespace wan_agent
         uint64_t *enter_queue_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
         // wait for certaion stability frontier
         int stability_frontier = 0;
+        int new_type_stability_frontier = 0;
         std::map<std::string, int> stability_frontier_for_types;
         uint64_t read_stability_frontier = (uint64_t)0;
         // uint64_t *who_is_max = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * N_MSG));
@@ -384,6 +385,7 @@ namespace wan_agent
         predicate_fn_type predicate;
         predicate_fn_type inverse_predicate;
         predicate_fn_type complicate_predicate;
+        new_predicate_fn_type new_type_predicate;
         std::map<std::string, predicate_fn_type> predicate_map;
         std::map<std::string, uint64_t> predicate_arrive_map;
         uint64_t sf_arrive_time = 0;
@@ -468,8 +470,10 @@ namespace wan_agent
         std::string inverse_predicate_expression;
         Predicate_Generator *predicate_generator;
         Predicate_Generator *inverse_predicate_generator;
+        Predicate_Generator *new_type_predicate_generator;
         predicate_fn_type predicate;
         predicate_fn_type inverse_predicate;
+        new_predicate_fn_type new_type_predicate;
         std::map<std::string, predicate_fn_type> predicate_map;
 
     public:

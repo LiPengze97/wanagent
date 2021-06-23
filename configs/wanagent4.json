@@ -8,6 +8,7 @@
     "window_size": 1000,
     "message_num": 10000,
     "predicate": "KTH_MIN($2,MAX($1,$2),$3,$4)",
+    "new_predicate": "MIN($1.persisted,$2.received,$3.processed,$4.received)",
     "predicates": [
         {
             "key": "received",
@@ -18,7 +19,7 @@
             "value": "KTH_MIN($2,$1,$2,$3,$4)"
         },
         {
-            "key": "countersigned",
+            "key": "processed",
             "value": "MIN($1,$2,$3,$4)"
         }
     ],

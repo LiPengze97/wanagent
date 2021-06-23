@@ -163,7 +163,7 @@ std::string RemoteMessageService::prepare_reply(){
     json j;
     for(auto iter = message_status.begin(); iter != message_status.end(); iter++){
         j[iter->first] = iter->second.load();
-    }
+    }    
     return j.dump();
 }
 
@@ -423,16 +423,20 @@ void MessageSender::recv_ack_loop() {
                 if (!success) {
                     throw std::runtime_error("failed receiving json reply");
                 }
-                json json_reply = json::parse(std::string(buffer.get()));
+                // std::cout << "site_id: " << res.site_id<<", json_size: " << json_size <<  " ," << std::string(buffer.get()) << std::endl;
+                json json_reply = json::parse(std::string(buffer.get(), json_size));
                 // update_predicate_counter(json_reply, res.site_id);
                 update_predicate_counter_postfix(json_reply, res.site_id);
+                // uint64_t sfst = get_time_us();
+                predicate_calculation_postfix();
+                // sf_calculation_cost += (get_time_us() - sfst*1.0) / 1000.0;
                 // if (res.site_id == 1000)
                 //     std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';// +
                 // "payload " + std::to_string(res.payload_size) + "seq " + std::to_string(res.seq) + '\n';
                 // ack_keeper[4*(message_counters[res.site_id])+(res.site_id - 1001)] = get_time_us();
-                message_counters[res.site_id]++;
+                // message_counters[res.site_id]++;
                 // uint64_t pre_cal_st_time = get_time_us();
-                int pre_stability_frontier = stability_frontier;
+                // int pre_stability_frontier = stability_frontier;
                 // predicate_calculation_multi();
                 // predicate_calculation();
                 // trigger_write_callback(pre_stability_frontier);
@@ -461,7 +465,7 @@ void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t 
     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
         arr_message_counter[ack_type_id[it.key()] * 16 + site_id_to_rank[site_id] ] = it.value();
     }
-    print_arr_msg_counter();
+    // print_arr_msg_counter();
 }
 
 void MessageSender::trigger_write_callback(const int pre_stability_frontier){
@@ -578,22 +582,10 @@ void MessageSender::predicate_calculation_multi() {
 
 
 void MessageSender::predicate_calculation_postfix() {
-    // log_enter_func(); 
-    // for(auto iter = message_counters_for_types.begin(); iter != message_counters_for_types.end(); iter++){
-    //     std::vector<int> value_ve;
-    //     std::vector<std::pair<site_id_t, uint64_t>> pair_ve;
-    //     value_ve.reserve(iter->second.size());
-    //     pair_ve.reserve(iter->second.size());
-    //     value_ve.push_back(0);
-    //     for(std::map<site_id_t, std::atomic<uint64_t>>::iterator it = iter->second.begin(); it != iter->second.end(); it++) {
-    //         value_ve.push_back(it->second.load());
-    //         pair_ve.push_back(std::make_pair(it->first, it->second.load()));
-    //     }
-    //     int* arr = &value_ve[0];
-    //     int val = predicate_map[iter->first](5, arr);
-    //     stability_frontier_for_types[iter->first] = pair_ve[val - 1].second;
-    //     // std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
-    // }
+    int val = new_type_predicate(arr_message_counter);
+    new_type_stability_frontier = arr_message_counter[val];
+    // printf("%d\n", new_type_stability_frontier);
+    // std::cout  << "new type sf is : " << new_type_stability_frontier << std::endl;
 }
 
 void MessageSender::predicate_calculation() {
@@ -930,15 +922,20 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
     predicate_experssion = wan_group_config[WAN_AGENT_PREDICATE];
-    inverse_predicate_expression = reverser::get_inverse_predicate(predicate_experssion);
+    // inverse_predicate_expression = reverser::get_inverse_predicate(predicate_experssion);
     std::istringstream iss(predicate_experssion);
-    std::istringstream i_iss(inverse_predicate_expression);
+    // std::istringstream i_iss(inverse_predicate_expression);
     predicate_generator = new Predicate_Generator(iss);
-    inverse_predicate_generator = new Predicate_Generator(i_iss);
+    // inverse_predicate_generator = new Predicate_Generator(i_iss);
     predicate = predicate_generator->get_predicate_function();
-    inverse_predicate = inverse_predicate_generator->get_predicate_function();
-    std::cout << predicate_experssion << std::endl;
+    // inverse_predicate = inverse_predicate_generator->get_predicate_function();
+    // std::cout << predicate_experssion << std::endl;
     // std::cout << inverse_predicate_expression << std::endl;
+
+    std::string new_type_expression = wan_group_config["new_predicate"];
+    std::istringstream new_type_iss(new_type_expression);
+    new_type_predicate_generator = new Predicate_Generator(new_type_iss, wan_group_config);
+    new_type_predicate = predicate_generator->get_new_predicate_function();
     // start predicate thread.
     // predicate_thread = std::thread(&WanAgentSender::predicate_loop, this);
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
@@ -966,7 +963,8 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     read_msg_thread = std::thread(&MessageSender::read_msg_loop, message_sender.get());
     // message_sender->set_read_quorum(message_counters.size()/2+1);
     message_sender->predicate = predicate;
-    message_sender->inverse_predicate = inverse_predicate;
+    message_sender->new_type_predicate = new_type_predicate;
+    // message_sender->inverse_predicate = inverse_predicate;
 }
 
 // void WanAgentSender::report_new_ack()
@@ -1190,6 +1188,7 @@ void WanAgentSender::out_out_file() {
 void WanAgentSender::shutdown_and_wait() {
     // std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
     // std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
+    std::cout << "new sf cal cost " << message_sender->sf_calculation_cost / 1000.0 << std::endl;
     // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
     // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
     // std::cout << "per latency " << ((message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0) / 100000 << std::endl;
