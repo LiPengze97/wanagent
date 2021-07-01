@@ -9,6 +9,7 @@
     "message_num": 10000,
     "predicate": "KTH_MIN($2,MAX($1,$2),$3,$4)",
     "new_predicate": "MIN($1.persisted,$2.received,$3.processed,$4.received)",
+    "postfix": ["persisted", "countersigned", "processed", "encrypted", "deprecated"],
     "predicates": [
         {
             "key": "received",

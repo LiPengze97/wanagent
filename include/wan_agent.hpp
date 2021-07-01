@@ -103,6 +103,7 @@ namespace wan_agent
                                                                           const char *)>;
     using ReadRecvCallback = std::function<void(const uint64_t, Blob &&)>;
     using WriteRecvCallback = std::function<void(const uint64_t)>;
+    using MonitorCallback = std::function<void(const int, const char *)>;
     /**
      * The Wan Agent abstract class
      */
@@ -291,6 +292,10 @@ namespace wan_agent
         int non_gccjit_calculation(int *seq_vec);
         std::mutex stability_frontier_arrive_mutex;
         std::condition_variable stability_frontier_arrive_cv;
+
+        std::mutex monitor_stability_frontier_mutex;
+        std::vector<std::mutex> monitor_stability_frontier_mutexes;
+        std::condition_variable monitor_stability_frontier_cv;
         bool sf_flag = false;
         // if program can work the below 3 lines can be deleted
         // int target_sf = -1;
@@ -323,10 +328,7 @@ namespace wan_agent
         int arr_message_counter[96] = {0};
         std::map<site_id_t, int> site_id_to_rank;
         int site_num_count = 1;
-        std::map<std::string, int> ack_type_id = {
-            {"received", 0}, {"persisted", 1}, {"processed", 2},
-            {"ud1", 3}, {"ud2", 4}, {"ud3", 5}
-        };
+        
 
 
         void print_arr_msg_counter(){
@@ -387,12 +389,21 @@ namespace wan_agent
         predicate_fn_type complicate_predicate;
         new_predicate_fn_type new_type_predicate;
         std::map<std::string, predicate_fn_type> predicate_map;
+        std::map<std::string, new_predicate_fn_type> new_predicate_map;
         std::map<std::string, uint64_t> predicate_arrive_map;
+        // stability frontier for each predicate in the map
+        std::map<std::string, uint64_t> new_predicate_arrive_map;
+
+        // char * monitor_char*;
         uint64_t sf_arrive_time = 0;
 
         double sf_calculation_cost = 0;
         double transfer_data_cost = 0;
         double get_size_cost = 0;
+
+        std::map<std::string, int> ack_type_id = {
+            {"received", 0}
+        };
 
         std::mutex stability_frontier_set_mutex;
         std::condition_variable stability_frontier_set_cv;
@@ -425,7 +436,8 @@ namespace wan_agent
         void predicate_calculation_postfix();
         void set_read_quorum(int read_quorum);
         // void read_predicate_calculation();
-        void wait_stability_frontier_loop(int sf);
+        void wait_stability_frontier_loop(int sf, std::string predicate_key);
+        void monitor_stability_frontier_loop(std::string predicate_key, MonitorCallback mc);
         void sf_time_checker_loop();
         void update_predicate_counter(json json_reply, site_id_t site_id);
         void update_predicate_counter_postfix(json json_reply, site_id_t site_id);
@@ -460,6 +472,8 @@ namespace wan_agent
         std::thread recv_ack_thread;
         std::thread send_msg_thread;
         std::thread wait_sf_thread;
+        std::vector<std::thread> wait_sf_threads;
+        std::vector<std::thread> monitor_sf_threads;
         std::thread recv_read_ack_thread;
         std::thread read_msg_thread;
         uint64_t all_start_time;
@@ -475,6 +489,10 @@ namespace wan_agent
         predicate_fn_type inverse_predicate;
         new_predicate_fn_type new_type_predicate;
         std::map<std::string, predicate_fn_type> predicate_map;
+        std::map<std::string, new_predicate_fn_type> new_predicate_map;
+
+        // read the user defined postfix and insert them in the sender's postfix rank map
+        void init_postfix(const nlohmann::json& config);
 
     public:
         WanAgentSender(const nlohmann::json &wan_group_config,
@@ -516,6 +534,9 @@ namespace wan_agent
 
         void submit_predicate(std::string key, std::string predicate_str, bool inplace);
 
+        // postfix type postfix
+        void submit_new_predicate(std::string key, std::string predicate_str, bool inplace);
+
         // generate predicates for each ACK type
         void generate_predicate(const nlohmann::json& config);
 
@@ -526,8 +547,6 @@ namespace wan_agent
 
         void print_predicate_map();
 
-        
-
         void change_predicate(std::string key);
 
         int get_stability_frontier();
@@ -535,26 +554,33 @@ namespace wan_agent
         void set_read_quorum(int read_quorum);
 
         uint64_t get_stability_frontier_arrive_time();
+
         void set_stability_frontier(int sf);
+
+        void wait_for(int sequnce_number, std::string predicate_key="default");
+
+        void monitor_stability_frontier(MonitorCallback, std::string predicate_key="default" );
+
         void test_predicate();
+        
         void wait() {
-        bool mark = 1;
-        while (mark) {
-            mark = 0;
-            for (auto& p : message_counters) {
-                if (p.second != get_stability_frontier()) {
-                    mark = 1;
-                    break;
+            bool mark = 1;
+            while (mark) {
+                mark = 0;
+                for (auto& p : message_counters) {
+                    if (p.second != get_stability_frontier()) {
+                        mark = 1;
+                        break;
+                    }
                 }
-            }
-            if (!mark) {
-                // for (auto& p : read_message_counters) {
-                //     if (p.second != message_sender->read_stability_frontier) {
-                //         mark = 1;
-                //         break;
-                //     }
-                // }
-            }
+                if (!mark) {
+                    // for (auto& p : read_message_counters) {
+                    //     if (p.second != message_sender->read_stability_frontier) {
+                    //         mark = 1;
+                    //         break;
+                    //     }
+                    // }
+                }
         }
         }
         /**

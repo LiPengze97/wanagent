@@ -310,6 +310,13 @@ int main(int argc, char **argv)
         };
         uint64_t start_time = now_us();
         uint64_t now_time;
+        
+        // monitor callback example
+        // wan_agent::MonitorCallback MC = [&](const int latest_sf, const char* application_object){
+        //     printf("changed!%d\n", latest_sf);
+        // };
+        // wanagent.wansender->monitor_stability_frontier(MC);
+        //monitor_end;
         for (int i = 1; i <= number_of_messages; ++i){
             now_time = now_us();
             while ((now_time - start_time)/1000000.0*expected_mps < (i - 1)) {
@@ -317,6 +324,12 @@ int main(int argc, char **argv)
                 now_time = now_us();
             }
             wanagent.wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
+            // wait test
+            // if(i == 65)
+            //     wanagent.wansender->wait_for(65);
+            // if(i == 88)
+            //     wanagent.wansender->wait_for(88);
+            // wait test end
             latest_blob = Blob(send_content.c_str(), send_content.size());
         }
         std::cout << "done!" << std::endl;

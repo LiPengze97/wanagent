@@ -268,12 +268,6 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();
-
-    // deprecated
-    // // TODO: for now, all sites must start in 3 seconds; to be replaced with retry mechanism when establishing sockets
-    // sleep(3);
-
-    
 }
 
 void WanAgentServer::shutdown_and_wait() {
@@ -584,7 +578,15 @@ void MessageSender::predicate_calculation_multi() {
 void MessageSender::predicate_calculation_postfix() {
     int val = new_type_predicate(arr_message_counter);
     new_type_stability_frontier = arr_message_counter[val];
-    // printf("%d\n", new_type_stability_frontier);
+    for(auto& key_predicate : new_predicate_map){
+        int sf = arr_message_counter[key_predicate.second(arr_message_counter)];
+        new_predicate_arrive_map[key_predicate.first] = sf;
+        // here we can trigger something
+
+    }
+    stability_frontier_arrive_cv.notify_one();
+    monitor_stability_frontier_cv.notify_all();
+    printf("%d\n", new_type_stability_frontier);
     // std::cout  << "new type sf is : " << new_type_stability_frontier << std::endl;
 }
 
@@ -742,12 +744,44 @@ int MessageSender::non_gccjit_calculation(int* seq_vec) {
     }
 }
 
-void MessageSender::wait_stability_frontier_loop(int sf) {
-    std::unique_lock<std::mutex> lock(stability_frontier_arrive_mutex);
-    stability_frontier_arrive_cv.wait(lock, [this, sf]() { return stability_frontier >= sf; });
-    sf_arrive_time = get_time_us();
-    stability_frontier_set_cv.notify_one();
+void MessageSender::wait_stability_frontier_loop(int sf, std::string predicate_key) {
+    while (true)
+    {
+        std::unique_lock<std::mutex> lock(stability_frontier_arrive_mutex);
+        stability_frontier_arrive_cv.wait(lock, [this, &sf, &predicate_key]() { return new_predicate_arrive_map[predicate_key] >= sf; });
+        break;
+    }
+    printf("%d arrived\n", sf);
+    pthread_exit(NULL);
+    //below two are together
+    // sf_arrive_time = get_time_us();
+    // stability_frontier_set_cv.notify_one();
 }
+
+void MessageSender::monitor_stability_frontier_loop(std::string predicate_key, MonitorCallback mc) {
+    if (new_predicate_map.count(predicate_key) == 0)
+    {
+        std::cerr << "no such key!\n";
+        return;
+    }
+    std::mutex mutex_for_this_loop;
+    // monitor_stability_frontier_mutexes.push_back(mutex_for_this_loop);
+    int old_value = new_predicate_arrive_map[predicate_key];
+    while (true)
+    {
+        std::unique_lock<std::mutex> lock(monitor_stability_frontier_mutex);
+        monitor_stability_frontier_cv.wait(lock, [this, &predicate_key, &old_value]() { 
+            return new_predicate_arrive_map[predicate_key] != old_value; 
+        });
+        old_value = new_predicate_arrive_map[predicate_key];
+        char* sss;
+        mc(new_predicate_arrive_map[predicate_key], sss);
+    }
+    
+}
+
+
+
 
 uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC) {
         // std::unique_lock<std::mutex> lock(mutex);
@@ -936,6 +970,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     std::istringstream new_type_iss(new_type_expression);
     new_type_predicate_generator = new Predicate_Generator(new_type_iss, wan_group_config);
     new_type_predicate = predicate_generator->get_new_predicate_function();
+
     // start predicate thread.
     // predicate_thread = std::thread(&WanAgentSender::predicate_loop, this);
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
@@ -956,7 +991,8 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             [this]() {});
     // [this]() { this->report_new_ack(); });
     // generate_predicate();
-    generate_predicate(wan_group_config);
+    // generate_predicate(wan_group_config);
+    init_postfix(wan_group_config);
     recv_ack_thread = std::thread(&MessageSender::recv_ack_loop, message_sender.get());
     send_msg_thread = std::thread(&MessageSender::send_msg_loop, message_sender.get());
     recv_read_ack_thread = std::thread(&MessageSender::recv_read_ack_loop, message_sender.get());
@@ -964,6 +1000,9 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     // message_sender->set_read_quorum(message_counters.size()/2+1);
     message_sender->predicate = predicate;
     message_sender->new_type_predicate = new_type_predicate;
+    message_sender->new_predicate_map["default"] = new_type_predicate;
+    new_predicate_map["default"] = new_type_predicate;
+    message_sender->new_predicate_arrive_map["default"] = 0;
     // message_sender->inverse_predicate = inverse_predicate;
 }
 
@@ -1002,6 +1041,22 @@ void WanAgentSender::submit_predicate(std::string key, std::string predicate_str
     // test_predicate();
 }
 
+void WanAgentSender::submit_new_predicate(std::string key, std::string predicate_str, bool inplace) {
+    std::istringstream new_type_iss(predicate_str);
+    new_type_predicate_generator = new Predicate_Generator(new_type_iss, config);
+    new_type_predicate = predicate_generator->get_new_predicate_function();
+
+    if(inplace) {
+        new_type_predicate = new_type_predicate;
+        message_sender->new_type_predicate = new_type_predicate;
+        std::cerr << "current new predicate :" << key << std::endl;
+    }
+
+    new_predicate_map[key] = new_type_predicate;
+    message_sender->new_predicate_map[key] = new_type_predicate;
+    message_sender->new_predicate_arrive_map[key] = 0;
+}
+
 void WanAgentSender::print_predicate_map(){
     for(std::map<std::string, predicate_fn_type>::iterator it = predicate_map.begin(); it != predicate_map.end(); it++) {
         std::cout << it->first << std::endl;
@@ -1010,6 +1065,13 @@ void WanAgentSender::print_predicate_map(){
 
 void WanAgentSender::set_read_quorum(int read_quorum){
     message_sender->set_read_quorum(read_quorum);
+}
+
+void WanAgentSender::init_postfix(const nlohmann::json& config){
+    int idx = 1;
+    for(auto& pf : config["postfix"]){
+        message_sender->ack_type_id[pf] = idx++;
+    }
 }
 
 void WanAgentSender::generate_predicate(const nlohmann::json& config) {
@@ -1069,7 +1131,22 @@ void WanAgentSender::generate_test_predicate() {
 void WanAgentSender::set_stability_frontier(int sf) {
     message_sender->wait_target_sf = sf;
     std::cout << "msg senderwaiting for " << message_sender->wait_target_sf << std::endl;
-    wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sf);
+    wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sf, "default");
+}
+
+void WanAgentSender::wait_for(int sequnce_number, std::string predicate_key){
+    if (new_predicate_map.count(predicate_key) == 0)
+    {
+        std::cerr << "no such key!\n";
+        return;
+    }
+    wait_sf_threads.push_back(std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sequnce_number, predicate_key));
+    // wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sequnce_number, predicate_key);
+}
+
+void WanAgentSender::monitor_stability_frontier(MonitorCallback mc, std::string predicate_key) {
+    monitor_sf_threads.push_back(std::thread(&MessageSender::monitor_stability_frontier_loop, message_sender.get(), predicate_key, mc));
+    monitor_sf_threads[monitor_sf_threads.size()-1].detach();
 }
 
 uint64_t WanAgentSender::get_stability_frontier_arrive_time() {
@@ -1077,6 +1154,7 @@ uint64_t WanAgentSender::get_stability_frontier_arrive_time() {
     message_sender->stability_frontier_set_cv.wait(lock, [this]() { return message_sender->sf_arrive_time != 0; });
     return message_sender->sf_arrive_time;
 }
+
 int WanAgentSender::get_stability_frontier() {
     return message_sender->stability_frontier;
 }
@@ -1188,7 +1266,7 @@ void WanAgentSender::out_out_file() {
 void WanAgentSender::shutdown_and_wait() {
     // std::cout << "all done! " << (get_time_us() - enter_queue_time_keeper[0]) << std::endl;
     // std::cout << "all done used " << (message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0 << std::endl;
-    std::cout << "new sf cal cost " << message_sender->sf_calculation_cost / 1000.0 << std::endl;
+    // std::cout << "new sf cal cost " << message_sender->sf_calculation_cost / 1000.0 << std::endl;
     // std::cout << "sf cal cost " << message_sender->sf_calculation_cost / 100000.0 << std::endl;
     // std::cout << "total sf cal cost " << message_sender->transfer_data_cost / 100000.0 << std::endl;
     // std::cout << "per latency " << ((message_sender->sf_arrive_time - message_sender->enter_queue_time_keeper[0]) / 1000000.0) / 100000 << std::endl;
