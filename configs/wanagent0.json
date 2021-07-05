@@ -8,7 +8,7 @@
     "window_size": 1000,
     "message_num": 10000,
     "predicate": "MIN($1,$2,$3,$4)",
-    "new_predicate": "MIN($ALLNODES.persisted)",
+    "new_predicate": "MIN($ALLNODES.deprecated)",
     "az": "Wisc",
     "postfix": ["persisted", "countersigned", "processed", "encrypted", "deprecated"],
     "predicates": [
