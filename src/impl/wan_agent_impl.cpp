@@ -280,7 +280,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
                              const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>>& server_sites_ip_addrs_and_ports,
                              const size_t& n_slots, const size_t& max_payload_size,
                              std::map<site_id_t, std::atomic<uint64_t>>& message_counters,
-                             std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types,
+                            //  std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types,
                             //  std::map<site_id_t, std::atomic<uint64_t>>& read_message_counters,
                              const ReportACKFunc& report_new_ack)
         : local_site_id(local_site_id),
@@ -288,7 +288,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
           last_all_sent_seqno(static_cast<uint64_t>(-1)),
           R_last_all_sent_seqno(static_cast<uint64_t>(-1)),
           message_counters(message_counters),
-          message_counters_for_types(message_counters_for_types),
+        //   message_counters_for_types(message_counters_for_types),
         //   read_message_counters(read_message_counters),
           report_new_ack(report_new_ack),
           thread_shutdown(false) {
@@ -312,7 +312,7 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
     epoll_fd_recv_read_ack = epoll_create1(0);
     if (epoll_fd_recv_read_ack == -1)
         throw std::runtime_error("failed to create epoll fd");
-
+    // arr_message_counter = new int[];
     for(const auto& [site_id, ip_port] : server_sites_ip_addrs_and_ports) {
         // if(site_id != local_site_id) {
             site_id_to_rank[site_id] = site_num_count++;
@@ -449,15 +449,15 @@ void MessageSender::recv_ack_loop() {
     log_exit_func();
 }
 
-void MessageSender::update_predicate_counter(json json_reply, site_id_t site_id){
-    for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
-        message_counters_for_types[it.key()][site_id] = it.value();
-    }
-}
+// void MessageSender::update_predicate_counter(json json_reply, site_id_t site_id){
+//     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
+//         message_counters_for_types[it.key()][site_id] = it.value();
+//     }
+// }
 
 void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t site_id){
     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
-        arr_message_counter[ack_type_id[it.key()] * 16 + site_id_to_rank[site_id] ] = it.value();
+        arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
     }
     // print_arr_msg_counter();
 }
@@ -507,7 +507,7 @@ void MessageSender::recv_read_ack_loop() {
                     throw std::runtime_error("failed receiving json reply");
                 }
                 json json_reply = json::parse(std::string(buffer.get()));
-                update_predicate_counter(json_reply, res.site_id);
+                update_predicate_counter_postfix(json_reply, res.site_id);
 
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
@@ -555,24 +555,24 @@ void MessageSender::recv_read_ack_loop() {
     log_exit_func();
 }
 
-void MessageSender::predicate_calculation_multi() {
-    log_enter_func(); 
-    for(auto iter = message_counters_for_types.begin(); iter != message_counters_for_types.end(); iter++){
-        std::vector<int> value_ve;
-        std::vector<std::pair<site_id_t, uint64_t>> pair_ve;
-        value_ve.reserve(iter->second.size());
-        pair_ve.reserve(iter->second.size());
-        value_ve.push_back(0);
-        for(std::map<site_id_t, std::atomic<uint64_t>>::iterator it = iter->second.begin(); it != iter->second.end(); it++) {
-            value_ve.push_back(it->second.load());
-            pair_ve.push_back(std::make_pair(it->first, it->second.load()));
-        }
-        int* arr = &value_ve[0];
-        int val = predicate_map[iter->first](5, arr);
-        stability_frontier_for_types[iter->first] = pair_ve[val - 1].second;
-        // std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
-    }
-}
+// void MessageSender::predicate_calculation_multi() {
+//     log_enter_func(); 
+//     for(auto iter = message_counters_for_types.begin(); iter != message_counters_for_types.end(); iter++){
+//         std::vector<int> value_ve;
+//         std::vector<std::pair<site_id_t, uint64_t>> pair_ve;
+//         value_ve.reserve(iter->second.size());
+//         pair_ve.reserve(iter->second.size());
+//         value_ve.push_back(0);
+//         for(std::map<site_id_t, std::atomic<uint64_t>>::iterator it = iter->second.begin(); it != iter->second.end(); it++) {
+//             value_ve.push_back(it->second.load());
+//             pair_ve.push_back(std::make_pair(it->first, it->second.load()));
+//         }
+//         int* arr = &value_ve[0];
+//         int val = predicate_map[iter->first](5, arr);
+//         stability_frontier_for_types[iter->first] = pair_ve[val - 1].second;
+//         // std::cout << iter->first << " sf is : " << stability_frontier_for_types[iter->first] << std::endl;
+//     }
+// }
 
 
 void MessageSender::predicate_calculation_postfix() {
@@ -986,7 +986,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
             wan_group_config[WAN_AGENT_WINDOW_SIZE],  // TODO: useless after using linked list
             wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
             message_counters,
-            message_counters_for_types,
+            // message_counters_for_types,
             // read_message_counters,
             [this]() {});
     // [this]() { this->report_new_ack(); });
@@ -1072,27 +1072,29 @@ void WanAgentSender::init_postfix(const nlohmann::json& config){
     for(auto& pf : config["postfix"]){
         message_sender->ack_type_id[pf] = idx++;
     }
+    message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*config["postfix"].size()];
+    // std::cout << "coutner size is " << (config["server_sites"].size()+1)*config["postfix"].size() << std:: endl;
 }
 
 void WanAgentSender::generate_predicate(const nlohmann::json& config) {
     // generate predicates for different kinds of ACK type
     for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
         submit_predicate(predicate_tmp["key"], predicate_tmp["value"],0);
-        init_predicate_counter(predicate_tmp["key"], config);
+        // init_predicate_counter(predicate_tmp["key"], config);
         // std::cout << "key " << predicate_tmp["key"] << ",value: " << predicate_tmp["value"] << std::endl;
     }
     // print_predicate_map();
 }
 
-void WanAgentSender::init_predicate_counter(std::string key, const nlohmann::json& config) {
-    message_counters_for_types[key] = std::map<site_id_t, std::atomic<uint64_t>>();
-    for(const auto& pair : server_sites_ip_addrs_and_ports) {
-        // if(local_site_id != pair.first) {
-            message_counters_for_types[key][pair.first] = 0;
-        // }
-    }
-    // std::cout << key << " " << message_counters_for_types[key].size() << std::endl;
-}
+// void WanAgentSender::init_predicate_counter(std::string key, const nlohmann::json& config) {
+//     message_counters_for_types[key] = std::map<site_id_t, std::atomic<uint64_t>>();
+//     for(const auto& pair : server_sites_ip_addrs_and_ports) {
+//         // if(local_site_id != pair.first) {
+//             message_counters_for_types[key][pair.first] = 0;
+//         // }
+//     }
+//     // std::cout << key << " " << message_counters_for_types[key].size() << std::endl;
+// }
 
 
 

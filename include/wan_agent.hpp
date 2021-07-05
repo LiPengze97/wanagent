@@ -323,9 +323,8 @@ namespace wan_agent
         std::map<int, site_id_t> R_sockfd_to_server_site_id_map;
 
         std::map<site_id_t, std::atomic<uint64_t>> &message_counters;
-        std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types;
-
-        int arr_message_counter[96] = {0};
+        // std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types;
+        
         std::map<site_id_t, int> site_id_to_rank;
         int site_num_count = 1;
         
@@ -358,6 +357,7 @@ namespace wan_agent
         std::map<uint64_t, WriteRecvCallback*> write_callback_store;
         
     public:
+        int* arr_message_counter;
         int ack_cnt = 0;
         double read_time_cost = 0;
         std::vector<pre_operation> operations;
@@ -418,7 +418,7 @@ namespace wan_agent
                       const std::map<site_id_t, std::pair<ip_addr_t, uint16_t>> &server_sites_ip_addrs_and_ports,
                       const size_t &n_slots, const size_t &max_payload_size,
                       std::map<site_id_t, std::atomic<uint64_t>> &message_counters,
-                      std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types,
+                    //   std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types,
                     //   std::map<site_id_t, std::atomic<uint64_t>> &read_message_counters,
                       const ReportACKFunc &report_new_ack);
         inline void update_max_version(const uint64_t &version)
@@ -432,14 +432,14 @@ namespace wan_agent
         void send_msg_loop();
         void read_msg_loop();
         void predicate_calculation();
-        void predicate_calculation_multi();
+        // void predicate_calculation_multi();
         void predicate_calculation_postfix();
         void set_read_quorum(int read_quorum);
         // void read_predicate_calculation();
         void wait_stability_frontier_loop(int sf, std::string predicate_key);
         void monitor_stability_frontier_loop(std::string predicate_key, MonitorCallback mc);
         void sf_time_checker_loop();
-        void update_predicate_counter(json json_reply, site_id_t site_id);
+        // void update_predicate_counter(json json_reply, site_id_t site_id);
         void update_predicate_counter_postfix(json json_reply, site_id_t site_id);
         void trigger_write_callback(const int pre_stability_frontier);
         // void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
@@ -478,7 +478,7 @@ namespace wan_agent
         std::thread read_msg_thread;
         uint64_t all_start_time;
         std::map<site_id_t, std::atomic<uint64_t>> message_counters;
-        std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > message_counters_for_types;
+        // std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > message_counters_for_types;
         // std::map<site_id_t, std::atomic<uint64_t>> read_message_counters;
         std::string predicate_experssion;
         std::string inverse_predicate_expression;
@@ -541,7 +541,7 @@ namespace wan_agent
         void generate_predicate(const nlohmann::json& config);
 
         // initialize message counters for 
-        void init_predicate_counter(std::string key, const nlohmann::json& config);
+        // void init_predicate_counter(std::string key, const nlohmann::json& config);
 
         void generate_test_predicate();
 
