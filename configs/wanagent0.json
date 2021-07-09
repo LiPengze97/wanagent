@@ -4,13 +4,15 @@
     "private_ip": "127.0.0.1",
     "private_port": 36000,
     "local_site_id": 1000,
+    "local_site_name": "A",
+    "local_az": "Utha",
     "max_payload_size": 102400,
     "window_size": 1000,
     "message_num": 10000,
     "predicate": "MIN($1,$2,$3,$4)",
-    "new_predicate": "MIN($ALLNODES.deprecated)",
+    "new_predicate": "MIN($WNODE_B.persisted, MAX([$ALLWNODES - $MYAZWNODES - $WNODE_D]), $AZ_Clme.processed, $5.processed, $3, KTH_MIN(SIZEOF($ALLWNODES)/2+1, $1, $2, $3))",
     "az": "Wisc",
-    "postfix": ["persisted", "countersigned", "processed", "encrypted", "deprecated"],
+    "suffix": ["persisted", "countersigned", "processed", "encrypted", "deprecated"],
     "predicates": [
         {
             "key": "received",
@@ -28,31 +30,36 @@
     "server_sites": [
         {
             "id": 1000,
+            "name": "A",
             "ip": "127.0.0.1",
             "port": 36000
         },
         {
             "id": 1001,
+            "name": "B",
             "ip": "127.0.0.1",
             "port": 36001
         },
         {
             "id": 1002,
+            "name": "C",
             "ip": "127.0.0.1",
             "port": 36002
         },
         {
             "id": 1003,
+            "name": "D",
             "ip": "127.0.0.1",
             "port": 36003
         },
         {
             "id": 1004,
+            "name": "E",
             "ip": "127.0.0.1",
             "port": 36004
         }
     ],
-    "AZ_info":[
+    "old_AZ_info":[
         {
             "name": "Utha",
             "nodes": [1000]
@@ -65,6 +72,10 @@
             "name": "Clme",
             "nodes": [1003, 1004]
         }
-    ],
+    ],"AZ_info":{
+        "Utha":["A"],
+        "Wisc":["B", "C"],
+        "Clme":["D", "E"]
+    },
     "num_of_sender_sites": 4
 }

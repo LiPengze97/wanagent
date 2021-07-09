@@ -164,6 +164,7 @@ std::string RemoteMessageService::prepare_reply(){
     for(auto iter = message_status.begin(); iter != message_status.end(); iter++){
         j[iter->first] = iter->second.load();
     }    
+    // std::cout << j.dump() << std::endl;
     return j.dump();
 }
 
@@ -171,14 +172,17 @@ void RemoteMessageService::update_message_status(std::string key){
     // message_status[key]++;
 
     // tmp update all
-    for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
-        message_status[predicate_tmp["key"]]++;
+    message_status["received"]++;
+    int idx = 2;
+    for(auto& predicate_tmp : config["suffix"]) {
+        message_status[predicate_tmp] += idx++;
     }
 }
 
 void RemoteMessageService::init_message_status_counter(){
-    for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
-        message_status[predicate_tmp["key"]] = 0;
+    message_status["received"] = 0;
+    for(auto& predicate_tmp : config["suffix"]) {
+        message_status[predicate_tmp] = 0;
     }
 }
 
@@ -586,7 +590,9 @@ void MessageSender::predicate_calculation_postfix() {
     }
     stability_frontier_arrive_cv.notify_one();
     monitor_stability_frontier_cv.notify_all();
-    printf("%d\n", new_type_stability_frontier);
+    // if(new_type_stability_frontier%1000 == 0){
+        printf("%d\n", new_type_stability_frontier);
+    // }
     // std::cout  << "new type sf is : " << new_type_stability_frontier << std::endl;
 }
 
@@ -955,13 +961,13 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
           has_new_ack(false),
           predicate_lambda(pl) {
     // std::string pss = "MIN($1,MAX($2,$3))";
-    predicate_experssion = wan_group_config[WAN_AGENT_PREDICATE];
+    // predicate_experssion = wan_group_config[WAN_AGENT_PREDICATE];
     // inverse_predicate_expression = reverser::get_inverse_predicate(predicate_experssion);
-    std::istringstream iss(predicate_experssion);
+    // std::istringstream iss(predicate_experssion);
     // std::istringstream i_iss(inverse_predicate_expression);
-    predicate_generator = new Predicate_Generator(iss);
+    // predicate_generator = new Predicate_Generator(iss);
     // inverse_predicate_generator = new Predicate_Generator(i_iss);
-    predicate = predicate_generator->get_predicate_function();
+    // predicate = predicate_generator->get_predicate_function();
     // inverse_predicate = inverse_predicate_generator->get_predicate_function();
     // std::cout << predicate_experssion << std::endl;
     // std::cout << inverse_predicate_expression << std::endl;
@@ -969,8 +975,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     std::string new_type_expression = wan_group_config["new_predicate"];
     std::istringstream new_type_iss(new_type_expression);
     new_type_predicate_generator = new Predicate_Generator(new_type_iss, wan_group_config);
-    new_type_predicate = predicate_generator->get_new_predicate_function();
-
+    new_type_predicate = new_type_predicate_generator->get_new_predicate_function();
     // start predicate thread.
     // predicate_thread = std::thread(&WanAgentSender::predicate_loop, this);
     for(const auto& pair : server_sites_ip_addrs_and_ports) {
@@ -1069,11 +1074,12 @@ void WanAgentSender::set_read_quorum(int read_quorum){
 
 void WanAgentSender::init_postfix(const nlohmann::json& config){
     int idx = 1;
-    for(auto& pf : config["postfix"]){
+    for(auto& pf : config["suffix"]){
         message_sender->ack_type_id[pf] = idx++;
     }
-    message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*config["postfix"].size()];
-    // std::cout << "coutner size is " << (config["server_sites"].size()+1)*config["postfix"].size() << std:: endl;
+    message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*(config["suffix"].size()+1)];
+    memset(message_sender->arr_message_counter, 0, sizeof(message_sender->arr_message_counter));
+    // std::cout << "coutner size is " << (config["server_sites"].size()+1)*config["suffix"].size() << std:: endl;
 }
 
 void WanAgentSender::generate_predicate(const nlohmann::json& config) {

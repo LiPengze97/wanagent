@@ -331,9 +331,9 @@ namespace wan_agent
 
 
         void print_arr_msg_counter(){
-            for(int i = 0; i < 3; i++){
-                for(int j = 0; j < 16; j++){
-                    printf("%d ", arr_message_counter[i*16 + j]);
+            for(int i = 0; i < 6; i++){
+                for(int j = 0; j < 6; j++){
+                    printf("%d ", arr_message_counter[i*6 + j]);
                 }
                 printf("\n");
             }

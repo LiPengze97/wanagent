@@ -49,9 +49,10 @@ Blob::Blob(Blob&& other) :
 Blob::Blob() : bytes(nullptr), size(0) {}
 
 Blob::~Blob() {
-    if(bytes && !is_temporary) {
-        delete [] bytes;
-    }
+    // double free or corruption (!prev) c++ ?
+    // if(bytes && !is_temporary) {
+    //     delete [] bytes;
+    // }
 }
 
 Blob& Blob::operator=(Blob&& other) {
