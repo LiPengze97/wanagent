@@ -86,6 +86,7 @@ int main(int argc, char** argv) {
         }
     };
 
-    wan_agent::WanAgentServer w_server(conf, rmc);
+    // wan_agent::WanAgentServer w_server(conf, rmc);
+    wan_agent::WanAgentServer w_server(conf, rmc, NULL);
     return 0;
 }

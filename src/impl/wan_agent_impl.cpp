@@ -102,6 +102,7 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
                                            unsigned short local_port,
                                            const size_t max_payload_size,
                                            const RemoteMessageCallback& rmc,
+                                           const newRemoteMessageCallback& newrmc,
                                            int msg_num,
                                            const nlohmann::json& wan_group_config,
                                            WanAgentAbstract* hugger)
@@ -109,6 +110,7 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
           num_senders(num_senders),
           max_payload_size(max_payload_size),
           rmc(rmc),
+          newrmc(newrmc),
           total_msg(msg_num),
           config(wan_group_config),
           hugger(hugger) {
@@ -186,6 +188,17 @@ void RemoteMessageService::init_message_status_counter(){
     }
 }
 
+void RemoteMessageService::send_ack_for_type(std::string key, int connect_fd){
+    json j;
+    j[key] = message_status[key].load();
+    std::string j_dump = j.dump();
+    bool success;
+    success = sock_write(connect_fd, Response{0, j_dump.size(), 0, 10086, local_site_id});
+    // the json reply
+    success = sock_write(connect_fd, j_dump.c_str(), j_dump.size());
+}
+
+
 void RemoteMessageService::epoll_worker(int connected_sock_fd) {
     RequestHeader header;
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(max_payload_size);
@@ -223,7 +236,8 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     }
                     last_message_time = get_time_us();
                 }
-                std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
+                // std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
+                std::pair<uint64_t, Blob> version_obj = std::move(newrmc(header, buffer.get(), connected_sock_fd));
                 update_message_status("test");
                 std::string json_reply = prepare_reply();
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, json_reply.size(),version_obj.first, header.seq, local_site_id});
@@ -258,20 +272,26 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
 
 
 WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
-                               const RemoteMessageCallback& rmc, std::string log_level)
+                               const RemoteMessageCallback& rmc, const newRemoteMessageCallback &newrmc, std::string log_level)
         : WanAgentAbstract(wan_group_config, log_level),
           remote_message_callback(rmc),
+          newremote_message_callback(newrmc),
           remote_message_service(
                   local_site_id,
                   num_senders,
                   local_port,
                   wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
                   rmc,
+                  newrmc,
                   wan_group_config["message_num"],
                   wan_group_config,
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();
+}
+
+void WanAgentServer::send_ack_for_type(std::string key, int connect_fd){
+    remote_message_service.send_ack_for_type(key, connect_fd);
 }
 
 void WanAgentServer::shutdown_and_wait() {
@@ -424,6 +444,10 @@ void MessageSender::recv_ack_loop() {
                 // std::cout << "site_id: " << res.site_id<<", json_size: " << json_size <<  " ," << std::string(buffer.get()) << std::endl;
                 json json_reply = json::parse(std::string(buffer.get(), json_size));
                 // update_predicate_counter(json_reply, res.site_id);
+                if(res.seq==10086){
+                    std::cout << json_reply.dump() << std::endl;
+                    continue;
+                }
                 update_predicate_counter_postfix(json_reply, res.site_id);
                 // uint64_t sfst = get_time_us();
                 predicate_calculation_postfix();
@@ -461,7 +485,9 @@ void MessageSender::recv_ack_loop() {
 
 void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t site_id){
     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
-        arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
+        // arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
+        // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
+        arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
     }
     // print_arr_msg_counter();
 }
@@ -1077,7 +1103,8 @@ void WanAgentSender::init_postfix(const nlohmann::json& config){
     for(auto& pf : config["suffix"]){
         message_sender->ack_type_id[pf] = idx++;
     }
-    message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*(config["suffix"].size()+1)];
+    // message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*(config["suffix"].size()+1)];
+    message_sender->arr_message_counter = new int[config["server_sites"].size()*config["suffix"].size()];
     memset(message_sender->arr_message_counter, 0, sizeof(message_sender->arr_message_counter));
     // std::cout << "coutner size is " << (config["server_sites"].size()+1)*config["suffix"].size() << std:: endl;
 }
