@@ -9,24 +9,9 @@
     "max_payload_size": 102400,
     "window_size": 1000,
     "message_num": 10000,
-    "predicate": "MIN($1,$2,$3,$4)",
-    "new_predicate": "MIN($1,$2,$3,$4,$5)",
-    "az": "Wisc",
+    "predicate": "MIN($1,$2,$3,$4,$5)",
     "suffix": ["persisted", "countersigned", "processed", "encrypted", "deprecated"],
-    "predicates": [
-        {
-            "key": "received",
-            "value": "MAX($1,$2,$3,$4)"
-        },
-        {
-            "key": "persisted",
-            "value": "KTH_MIN($2,$1,$2,$3,$4)"
-        },
-        {
-            "key": "processed",
-            "value": "MIN($1,$2,$3,$4)"
-        }
-    ],
+    "num_of_sender_sites": 4,
     "server_sites": [
         {
             "id": 1000,
@@ -58,24 +43,9 @@
             "ip": "127.0.0.1",
             "port": 36004
         }
-    ],
-    "old_AZ_info":[
-        {
-            "name": "Utha",
-            "nodes": [1000]
-        },
-        {
-            "name": "Wisc",
-            "nodes": [1001, 1002]
-        },
-        {
-            "name": "Clme",
-            "nodes": [1003, 1004]
-        }
     ],"AZ_info":{
         "Utha":["A"],
         "Wisc":["B", "C"],
         "Clme":["D", "E"]
-    },
-    "num_of_sender_sites": 4
+    }
 }

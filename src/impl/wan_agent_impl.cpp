@@ -236,8 +236,8 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     }
                     last_message_time = get_time_us();
                 }
-                // std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
-                std::pair<uint64_t, Blob> version_obj = std::move(newrmc(header, buffer.get(), connected_sock_fd));
+                std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
+                // std::pair<uint64_t, Blob> version_obj = std::move(newrmc(header, buffer.get(), connected_sock_fd));
                 update_message_status("test");
                 std::string json_reply = prepare_reply();
                 success = sock_write(connected_sock_fd, Response{version_obj.second.size, json_reply.size(),version_obj.first, header.seq, local_site_id});
@@ -998,7 +998,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     // std::cout << predicate_experssion << std::endl;
     // std::cout << inverse_predicate_expression << std::endl;
 
-    std::string new_type_expression = wan_group_config["new_predicate"];
+    std::string new_type_expression = wan_group_config[WAN_AGENT_PREDICATE];
     std::istringstream new_type_iss(new_type_expression);
     new_type_predicate_generator = new Predicate_Generator(new_type_iss, wan_group_config);
     new_type_predicate = new_type_predicate_generator->get_new_predicate_function();
@@ -1110,12 +1110,13 @@ void WanAgentSender::init_postfix(const nlohmann::json& config){
 }
 
 void WanAgentSender::generate_predicate(const nlohmann::json& config) {
+    // deprecated
     // generate predicates for different kinds of ACK type
-    for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
-        submit_predicate(predicate_tmp["key"], predicate_tmp["value"],0);
-        // init_predicate_counter(predicate_tmp["key"], config);
-        // std::cout << "key " << predicate_tmp["key"] << ",value: " << predicate_tmp["value"] << std::endl;
-    }
+    // for(auto& predicate_tmp : config[WAN_AGENT_PREDICATES]) {
+    //     submit_predicate(predicate_tmp["key"], predicate_tmp["value"],0);
+    //     // init_predicate_counter(predicate_tmp["key"], config);
+    //     // std::cout << "key " << predicate_tmp["key"] << ",value: " << predicate_tmp["value"] << std::endl;
+    // }
     // print_predicate_map();
 }
 

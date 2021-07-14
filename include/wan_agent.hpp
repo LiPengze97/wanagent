@@ -45,7 +45,6 @@ namespace wan_agent
 #define WAN_AGENT_MAX_PAYLOAD_SIZE "max_payload_size"
 #define WAN_AGENT_WINDOW_SIZE "window_size"
 #define WAN_AGENT_PREDICATE "predicate"
-#define WAN_AGENT_PREDICATES "predicates"
 #define EPOLL_MAXEVENTS 64
 #define WAN_AGENT_CHECK_SITE_ENTRY(x)                                           \
     if (site.find(x) == site.end())                                             \
