@@ -338,8 +338,16 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
         throw std::runtime_error("failed to create epoll fd");
     // arr_message_counter = new int[];
     for(const auto& [site_id, ip_port] : server_sites_ip_addrs_and_ports) {
+        is_connected[site_id] = false;
+        site_id_to_rank[site_id] = site_num_count++;
+    }
+    while(true){
+        bool all_connect_flag = true;
+        for(const auto& [site_id, ip_port] : server_sites_ip_addrs_and_ports) {
         // if(site_id != local_site_id) {
-            site_id_to_rank[site_id] = site_num_count++;
+            if(is_connected[site_id]){
+                continue;
+            }
             sockaddr_in serv_addr;
             int fd = ::socket(AF_INET, SOCK_STREAM, 0);
             int R_fd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -351,21 +359,32 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
                 fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
                 exit(-1);
             }
-            ret = setsockopt(R_fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
-            if (ret == -1) {
-                fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
-                exit(-1);
-            }
+            
             memset(&serv_addr, 0, sizeof(serv_addr));
             serv_addr.sin_family = AF_INET;
             serv_addr.sin_port = htons(ip_port.second);
 
             inet_pton(AF_INET, ip_port.first.c_str(), &serv_addr.sin_addr);
             if(connect(fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-                throw std::runtime_error("MessageSender failed to connect socket");
+                all_connect_flag = false;
+                close(fd);
+                close(R_fd);
+                continue;
+                // throw std::runtime_error("MessageSender failed to connect socket");
             }
+
+            ret = setsockopt(R_fd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
+            if (ret == -1) {
+                fprintf(stderr, "ERROR on setsockopt: %s\n", strerror(errno));
+                exit(-1);
+            }
+
             if (connect(R_fd, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
-                throw std::runtime_error("MessageSender failed to connect socket");
+                all_connect_flag = false;
+                close(fd);
+                close(R_fd);
+                continue;
+                // throw std::runtime_error("MessageSender failed to connect socket");
             }
             std::cout << "new fd pair " << site_id << ' ' << fd << ' ' << R_fd << std::endl;
             add_epoll(epoll_fd_send_msg, EPOLLOUT, fd);
@@ -376,9 +395,17 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
             R_sockfd_to_server_site_id_map[R_fd] = site_id;
             last_sent_seqno.emplace(site_id, static_cast<uint64_t>(-1));
             R_last_sent_seqno.emplace(site_id, static_cast<uint64_t>(-1));
+            is_connected[site_id] = true;
         // }
+        }
+        if(all_connect_flag){
+            printf("All connected!\n");
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-
+    // memset(arr_message_counter, 0, sizeof(arr_message_counter));
+    // print_arr_msg_counter();
     nServer = message_counters.size();
     set_read_quorum(message_counters.size()/2+1);
     std::cout << "nServer = " << nServer << ",read_quorum " << read_quorum << std::endl;
@@ -489,7 +516,7 @@ void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t 
         // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
         arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
     }
-    // print_arr_msg_counter();
+    print_arr_msg_counter();
 }
 
 void MessageSender::trigger_write_callback(const int pre_stability_frontier){
@@ -1104,7 +1131,7 @@ void WanAgentSender::init_postfix(const nlohmann::json& config){
         message_sender->ack_type_id[pf] = idx++;
     }
     // message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*(config["suffix"].size()+1)];
-    message_sender->arr_message_counter = new int[config["server_sites"].size()*config["suffix"].size()];
+    message_sender->arr_message_counter = new int[config["server_sites"].size()*(config["suffix"].size()+1)];
     memset(message_sender->arr_message_counter, 0, sizeof(message_sender->arr_message_counter));
     // std::cout << "coutner size is " << (config["server_sites"].size()+1)*config["suffix"].size() << std:: endl;
 }

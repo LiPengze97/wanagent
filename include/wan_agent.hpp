@@ -331,6 +331,8 @@ namespace wan_agent
         std::map<int, site_id_t> sockfd_to_server_site_id_map;
         std::map<int, site_id_t> R_sockfd_to_server_site_id_map;
 
+        std::map<site_id_t, bool> is_connected;
+
         std::map<site_id_t, std::atomic<uint64_t>> &message_counters;
         // std::map<std::string, std::map<site_id_t, std::atomic<uint64_t>> > &message_counters_for_types;
         
@@ -627,7 +629,7 @@ namespace wan_agent
                  const PredicateLambda &pl, const RemoteMessageCallback &rmc, const newRemoteMessageCallback &newrmc, std::string log_level = "trace")
         {
             wanserver = new WanAgentServer(config, rmc, newrmc);
-            sleep(3);
+            // sleep(3);
             wansender = new WanAgentSender(config, pl);
         }
         ~WanAgent(){
