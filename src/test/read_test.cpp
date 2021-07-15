@@ -196,7 +196,7 @@ int main(int argc, char **argv)
         //      << ", message size:" << RH.payload_size << " bytes"
         //      << ", message version:" << RH.version
         //      << endl;
-        if (RH.requestType == 1)
+        if (RH.request_type == 1)
         {
             // version_t prev_version = pblob.getLatestVersion();
             // version_t cur_version = prev_version + 1;

@@ -191,13 +191,13 @@ public:
         for (int i = 1; i <= 5000; ++i) obj += 'a';
         
         wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
-            if (RH.requestType == 1)
+            if (RH.request_type == 1)
             {
                 std::cout << "receive a message!!\n";
                 latest_blob = std::move(Blob(msg, RH.payload_size));
                 max_version = std::max(RH.version, max_version);
                 for(int i = 0; i < subscribers.size(); i++){
-                    bool success = sock_write(subscribers[i], Response{RH.payload_size, RH.version, RH.seq, RH.site_id});
+                    bool success = sock_write(subscribers[i], Response{RH.request_type, RH.payload_size, RH.version, RH.seq, RH.site_id});
                     if(!success)
                         throw std::runtime_error("Failed to send ACK message");
                 }

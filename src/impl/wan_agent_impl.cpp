@@ -102,7 +102,6 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
                                            unsigned short local_port,
                                            const size_t max_payload_size,
                                            const RemoteMessageCallback& rmc,
-                                           const newRemoteMessageCallback& newrmc,
                                            int msg_num,
                                            const nlohmann::json& wan_group_config,
                                            WanAgentAbstract* hugger)
@@ -110,7 +109,6 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
           num_senders(num_senders),
           max_payload_size(max_payload_size),
           rmc(rmc),
-          newrmc(newrmc),
           total_msg(msg_num),
           config(wan_group_config),
           hugger(hugger) {
@@ -188,14 +186,14 @@ void RemoteMessageService::init_message_status_counter(){
     }
 }
 
-void RemoteMessageService::send_ack_for_type(std::string key, int connect_fd){
+void RemoteMessageService::send_ack_for_type(std::string key, site_id_t site_id){
     json j;
     j[key] = message_status[key].load();
     std::string j_dump = j.dump();
     bool success;
-    success = sock_write(connect_fd, Response{0, j_dump.size(), 0, 10086, local_site_id});
+    success = sock_write(site_id_to_connect_fd[site_id], Response{MESSAGE_TYPE_UPDATE_FOR_TYPE, 0, j_dump.size(), 0, 0, local_site_id});
     // the json reply
-    success = sock_write(connect_fd, j_dump.c_str(), j_dump.size());
+    success = sock_write(site_id_to_connect_fd[site_id], j_dump.c_str(), j_dump.size());
 }
 
 
@@ -223,9 +221,13 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                               << "receive " << n << " messages from sender.\n";
                     throw std::runtime_error("Failed to read request header");
                 }
-                if(receive_cnt==1000 && all_start_time == 0){
-                    all_start_time = get_time_us();
+                if(!site_id_to_connect_fd.count(header.site_id)){
+                    site_id_to_connect_fd[header.site_id] = connected_sock_fd;
                 }
+                // if(receive_cnt==1000 && all_start_time == 0){
+                //     // this is used to test the bandwidth, because the first 1000 messages have high delay at sometime
+                //     all_start_time = get_time_us();
+                // }
                 if (header.payload_size) {
                     success = sock_read(connected_sock_fd, buffer.get(), header.payload_size);
                     if(!success)
@@ -237,14 +239,13 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     last_message_time = get_time_us();
                 }
                 std::pair<uint64_t, Blob> version_obj = std::move(rmc(header, buffer.get()));
-                // std::pair<uint64_t, Blob> version_obj = std::move(newrmc(header, buffer.get(), connected_sock_fd));
                 update_message_status("test");
                 std::string json_reply = prepare_reply();
-                success = sock_write(connected_sock_fd, Response{version_obj.second.size, json_reply.size(),version_obj.first, header.seq, local_site_id});
+                success = sock_write(connected_sock_fd, Response{header.request_type, version_obj.second.size, json_reply.size(),version_obj.first, header.seq, local_site_id});
 
                 // the json reply
                 success = sock_write(connected_sock_fd, json_reply.c_str(), json_reply.size());
-                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.requestType ? "read":"write") << " request\n";
+                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.request_type ? "read":"write") << " request\n";
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
                 // if(total_msg == receive_cnt){
                 //     receive_cnt -= 1000;
@@ -256,7 +257,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                     throw std::runtime_error("Receiver: something wrong with version");
                 if(!success)
                     throw std::runtime_error("Failed to send ACK message");
-                if (header.requestType == 0) { // read request
+                if (header.request_type == 0) { // read request
                     success = sock_write(connected_sock_fd, version_obj.first);
                     if (!success)
                         throw std::runtime_error("Failed to send version");
@@ -272,17 +273,15 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
 
 
 WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
-                               const RemoteMessageCallback& rmc, const newRemoteMessageCallback &newrmc, std::string log_level)
+                               const RemoteMessageCallback& rmc, std::string log_level)
         : WanAgentAbstract(wan_group_config, log_level),
           remote_message_callback(rmc),
-          newremote_message_callback(newrmc),
           remote_message_service(
                   local_site_id,
                   num_senders,
                   local_port,
                   wan_group_config[WAN_AGENT_MAX_PAYLOAD_SIZE],
                   rmc,
-                  newrmc,
                   wan_group_config["message_num"],
                   wan_group_config,
                   this) {
@@ -290,8 +289,8 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
     rms_establish_thread.detach();
 }
 
-void WanAgentServer::send_ack_for_type(std::string key, int connect_fd){
-    remote_message_service.send_ack_for_type(key, connect_fd);
+void WanAgentServer::send_ack_for_type(std::string key, site_id_t site_id){
+    remote_message_service.send_ack_for_type(key, site_id);
 }
 
 void WanAgentServer::shutdown_and_wait() {
@@ -464,17 +463,24 @@ void MessageSender::recv_ack_loop() {
                     throw std::runtime_error("failed receiving ACK message");
                 }
                 auto json_size = res.json_reply_size;
-                success = sock_read(events[i].data.fd, buffer.get(), res.json_reply_size);
-                if (!success) {
-                    throw std::runtime_error("failed receiving json reply");
+                json json_reply;
+                if(json_size){
+                    success = sock_read(events[i].data.fd, buffer.get(), res.json_reply_size);
+                    if (!success) {
+                        throw std::runtime_error("failed receiving json reply");
+                    }
+                    // std::cout << "site_id: " << res.site_id<<", json_size: " << json_size <<  " ," << std::string(buffer.get()) << std::endl;
+                    json_reply = json::parse(std::string(buffer.get(), json_size));
                 }
-                // std::cout << "site_id: " << res.site_id<<", json_size: " << json_size <<  " ," << std::string(buffer.get()) << std::endl;
-                json json_reply = json::parse(std::string(buffer.get(), json_size));
-                // update_predicate_counter(json_reply, res.site_id);
-                if(res.seq==10086){
-                    std::cout << json_reply.dump() << std::endl;
+                if(res.request_type == MESSAGE_TYPE_UPDATE_FOR_TYPE){
+                    // std::cout << "olaolaola" << json_reply.dump() << std::endl;
                     continue;
                 }
+                
+                
+                
+                // update_predicate_counter(json_reply, res.site_id);
+
                 update_predicate_counter_postfix(json_reply, res.site_id);
                 // uint64_t sfst = get_time_us();
                 predicate_calculation_postfix();
@@ -516,7 +522,7 @@ void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t 
         // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
         arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
     }
-    print_arr_msg_counter();
+    // print_arr_msg_counter();
 }
 
 void MessageSender::trigger_write_callback(const int pre_stability_frontier){
@@ -842,14 +848,14 @@ void MessageSender::monitor_stability_frontier_loop(std::string predicate_key, M
 
 
 
-uint64_t MessageSender::enqueue(const uint32_t requestType, const char* payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC) {
+uint64_t MessageSender::enqueue(const uint32_t request_type, const char* payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC) {
         // std::unique_lock<std::mutex> lock(mutex);
     size_mutex.lock();
     LinkedBufferNode* tmp = new LinkedBufferNode();
     tmp->message_size = payload_size;
     tmp->message_body = (char*)malloc(payload_size);
     memcpy(tmp->message_body, payload, payload_size);
-    tmp->message_type = requestType;
+    tmp->message_type = request_type;
     tmp->RRC = nullptr;
     tmp->WRC = WRC;
 
@@ -913,7 +919,7 @@ void MessageSender::send_msg_loop() {
                 // auto pos = (offset + head) % n_slots;
                 auto node = buffer_list.front(); //!!!!! dangerous, a copy of char*
                 size_t payload_size = node.message_size;
-                auto requestType = node.message_type;
+                auto request_type = node.message_type;
                 auto version = node.message_version;
                 // decode paylaod_size in the beginning
                 // memcpy(&payload_size, buf[pos].get(), sizeof(size_t));
@@ -922,7 +928,7 @@ void MessageSender::send_msg_loop() {
                 // log_info("sending msg {} to site {}.", curr_seqno, site_id);
                 // send over socket
                 // time_keeper[curr_seqno*4+site_id-1] = now_us();
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, version, local_site_id, payload_size});
+                sock_write(events[i].data.fd, RequestHeader{request_type, version, version, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
                 leave_queue_time_keeper[curr_seqno * 4 + site_id - 1001] = get_time_us();
@@ -977,11 +983,11 @@ void MessageSender::read_msg_loop() {
                 }
                 auto node = read_buffer_list.front();
                 size_t payload_size = node.message_size;
-                auto requestType = node.message_type;
+                auto request_type = node.message_type;
                 auto version = node.message_version;
                 auto curr_seqno = R_last_sent_seqno[site_id] + 1;
                 read_callback_store[curr_seqno] = node.RRC;
-                sock_write(events[i].data.fd, RequestHeader{requestType, version, curr_seqno, local_site_id, payload_size});
+                sock_write(events[i].data.fd, RequestHeader{request_type, version, curr_seqno, local_site_id, payload_size});
                 if (payload_size) {
                     throw std::runtime_error("Something went wrong with read requests");
                 }

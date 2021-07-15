@@ -197,13 +197,13 @@ int main(int argc, char **argv)
     string obj = "";
     uint64_t max_rec_version = 0;
     for (int i = 1; i <= 5000; ++i) obj += 'a';
-    
+    wan_agent::WanAgent* wanagent;
     wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
         // cout << "message received from site:" << RH.site_id
         //      << ", message size:" << RH.payload_size << " bytes"
         //      << ", message version:" << RH.version
         //      << endl;
-        if (RH.requestType == 1)
+        if (RH.request_type == 1)
         {
             // version_t prev_version = pblob.getLatestVersion();
             // version_t cur_version = prev_version + 1;
@@ -215,6 +215,7 @@ int main(int argc, char **argv)
             // seq_versions[RH.version] = cur_version;
             // assert(max_version < RH.version);
             max_version = std::max(RH.version, max_version);
+            wanagent->wanserver->send_ack_for_type("received", RH.site_id);
             // cout << "message received from site:" << RH.site_id
             // << ", message size:" << RH.payload_size << ", bytes"
             //  << ", message version:" << RH.version << ", max version: " << max_version
@@ -290,7 +291,8 @@ int main(int argc, char **argv)
             all_received.store(true);
         }
     };
-    wan_agent::WanAgent wanagent(conf, pl, rmc);
+    // wan_agent::WanAgent wanagent(conf, pl, rmc);
+    wanagent = new wan_agent::WanAgent(conf, pl, rmc);
 
     // simple test
     if(is_sender){
@@ -323,7 +325,7 @@ int main(int argc, char **argv)
                 std::this_thread::sleep_for(std::chrono::microseconds(SLEEP_US));
                 now_time = now_us();
             }
-            wanagent.wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
+            wanagent->wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
             // wait test
             // if(i == 65)
             //     wanagent.wansender->wait_for(65);
@@ -430,7 +432,7 @@ int main(int argc, char **argv)
     */
     std::cout << "Press ENTER to kill." << std::endl;
     std::cin.get();
-    wanagent.shutdown_and_wait();
+    wanagent->shutdown_and_wait();
     
     return 0;
 }

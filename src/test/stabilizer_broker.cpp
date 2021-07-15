@@ -312,7 +312,7 @@ public:
         for (int i = 1; i <= 5000; ++i) obj += 'a';
         
         wan_agent::RemoteMessageCallback rmc = [&](const RequestHeader &RH, const char *msg) {
-            if (RH.requestType == 1)
+            if (RH.request_type == 1)
             {
                 std::cout << "receive a message!!\n";
                 latest_blob = std::move(Blob(msg, RH.payload_size));
@@ -389,7 +389,7 @@ public:
                     // request_type 4 is publish
                     // request_type 5 is broker
                     // request_type 6 is broker wants to de/active itself
-                    switch(header.requestType){
+                    switch(header.request_type){
                         case 2:
                             subscribe_cnt++;
                             // check the site id(here used as user id) is unique

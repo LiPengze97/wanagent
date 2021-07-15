@@ -45,7 +45,14 @@ namespace wan_agent
 #define WAN_AGENT_MAX_PAYLOAD_SIZE "max_payload_size"
 #define WAN_AGENT_WINDOW_SIZE "window_size"
 #define WAN_AGENT_PREDICATE "predicate"
+
+#define MESSAGE_TYPE_READ 0
+#define MESSAGE_TYPE_WRITE 1
+#define MESSAGE_TYPE_UPDATE_FOR_TYPE 2
+#define MESSAGE_TYPE_UPDATE_GST 3
+
 #define EPOLL_MAXEVENTS 64
+
 #define WAN_AGENT_CHECK_SITE_ENTRY(x)                                           \
     if (site.find(x) == site.end())                                             \
     {                                                                           \
@@ -77,7 +84,7 @@ namespace wan_agent
 
     struct RequestHeader
     {
-        uint32_t requestType;
+        uint32_t request_type;
         uint64_t version;
         uint64_t seq;
         uint32_t site_id;
@@ -86,6 +93,7 @@ namespace wan_agent
 
     struct Response
     {
+        uint32_t request_type;
         size_t payload_size;
         size_t json_reply_size;
         uint64_t version;
@@ -100,8 +108,6 @@ namespace wan_agent
      */
     using RemoteMessageCallback = std::function<std::pair<uint64_t, Blob>(const RequestHeader &,
                                                                           const char *)>;
-    using newRemoteMessageCallback = std::function<std::pair<uint64_t, Blob>(const RequestHeader &,
-                                                                          const char *, int sockfd)>;
     using ReadRecvCallback = std::function<void(const uint64_t, Blob &&)>;
     using WriteRecvCallback = std::function<void(const uint64_t)>;
     using MonitorCallback = std::function<void(const int, const char *)>;
@@ -181,7 +187,6 @@ namespace wan_agent
         size_t num_senders;
         const size_t max_payload_size;
         const RemoteMessageCallback rmc;
-        const newRemoteMessageCallback newrmc;
 
         std::list<std::thread> worker_threads;
 
@@ -194,6 +199,8 @@ namespace wan_agent
         const WanAgentAbstract *hugger;
 
         std::map<std::string, std::atomic<int>> message_status;
+
+        std::map<site_id_t, int> site_id_to_connect_fd;
 
         // use epoll to get message from senders.
         // socc var
@@ -209,7 +216,6 @@ namespace wan_agent
                              unsigned short local_port,
                              const size_t max_payload_size,
                              const RemoteMessageCallback &rmc,
-                             const newRemoteMessageCallback &newrmc,
                              int msg_num,
                              const nlohmann::json& wan_group_config,
                              WanAgentAbstract *hugger);
@@ -225,7 +231,7 @@ namespace wan_agent
 
         void init_message_status_counter();
 
-        void send_ack_for_type(std::string key, int connect_fd);
+        void send_ack_for_type(std::string key, site_id_t site_id);
     };
 
     class WanAgentServer : public WanAgentAbstract
@@ -236,8 +242,6 @@ namespace wan_agent
          */
         const RemoteMessageCallback &remote_message_callback;
 
-        const newRemoteMessageCallback &newremote_message_callback;
-
         RemoteMessageService remote_message_service;
         // the conditional variable for initialization
         std::mutex ready_mutex;           // TODO: 思考下ready的作用究竟是什么
@@ -245,9 +249,9 @@ namespace wan_agent
 
     public:
         WanAgentServer(const nlohmann::json &wan_group_config,
-                       const RemoteMessageCallback &rmc, const newRemoteMessageCallback &newrmc, std::string log_level = "trace");
+                       const RemoteMessageCallback &rmc, std::string log_level = "trace");
         ~WanAgentServer() {}
-        void send_ack_for_type(std::string key, int connect_fd);
+        void send_ack_for_type(std::string key, site_id_t site_id);
         // bool is_ready()
         // {
         //     if (!remote_message_service.is_server_ready())
@@ -438,7 +442,7 @@ namespace wan_agent
         }
         void recv_ack_loop();
         void recv_read_ack_loop();
-        uint64_t enqueue(const uint32_t requestType, const char *payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC);
+        uint64_t enqueue(const uint32_t request_type, const char *payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC);
         void read_enqueue(const uint64_t &version, ReadRecvCallback* RRC);
         void send_msg_loop();
         void read_msg_loop();
@@ -621,14 +625,7 @@ namespace wan_agent
         WanAgent(const nlohmann::json &config,
                  const PredicateLambda &pl, const RemoteMessageCallback &rmc, std::string log_level = "trace")
         {
-            wanserver = new WanAgentServer(config, rmc, NULL);
-            sleep(3);
-            wansender = new WanAgentSender(config, pl);
-        }
-        WanAgent(const nlohmann::json &config,
-                 const PredicateLambda &pl, const RemoteMessageCallback &rmc, const newRemoteMessageCallback &newrmc, std::string log_level = "trace")
-        {
-            wanserver = new WanAgentServer(config, rmc, newrmc);
+            wanserver = new WanAgentServer(config, rmc);
             // sleep(3);
             wansender = new WanAgentSender(config, pl);
         }
