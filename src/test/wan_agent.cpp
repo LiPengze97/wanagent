@@ -215,7 +215,7 @@ int main(int argc, char **argv)
             // seq_versions[RH.version] = cur_version;
             // assert(max_version < RH.version);
             max_version = std::max(RH.version, max_version);
-            wanagent->wanserver->send_ack_for_type("received", RH.site_id);
+            // wanagent->wanserver->send_ack_for_type("received", RH.site_id);
             // cout << "message received from site:" << RH.site_id
             // << ", message size:" << RH.payload_size << ", bytes"
             //  << ", message version:" << RH.version << ", max version: " << max_version

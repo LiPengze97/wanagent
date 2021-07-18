@@ -12,6 +12,7 @@
     "predicate": "KTH_MIN(2,MAX($1,$2),$3,$4)",
     "suffix": ["persisted", "countersigned", "processed", "encrypted", "deprecated"],
     "num_of_sender_sites": 4,
+    "GST_update_interval": 1000,
     "server_sites": [
         {
             "id": 1000,

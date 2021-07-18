@@ -145,6 +145,7 @@ RemoteMessageService::RemoteMessageService(const site_id_t local_site_id,
     server_socket = fd;
     std::cout << "RemoteMessageService listening on " << local_port << std::endl;
     init_message_status_counter();
+    GST_update_interval = config["GST_update_interval"];
     // dbg_default_info("RemoteMessageService listening on {} ...", local_port);
 };
 
@@ -168,6 +169,16 @@ std::string RemoteMessageService::prepare_reply(){
     return j.dump();
 }
 
+std::string RemoteMessageService::prepare_GST_update_of_site(site_id_t site_id){
+    json j;
+    // for(auto iter = all_message_status[site_id].begin(); iter != all_message_status[site_id].end(); iter++){
+    //     j[iter->first] = iter->second.load();
+    // } 
+    j["foo"] = "bar";   
+    // std::cout << j.dump() << std::endl;
+    return j.dump();
+}
+
 void RemoteMessageService::update_message_status(std::string key){
     // message_status[key]++;
 
@@ -179,11 +190,59 @@ void RemoteMessageService::update_message_status(std::string key){
     }
 }
 
+void RemoteMessageService::update_message_status_from_site(site_id_t site_id, std::string key){
+    // message_status[key]++;
+
+    // tmp update all
+    all_message_status[site_id]["received"]++;
+    int idx = 2;
+    for(auto& predicate_tmp : config["suffix"]) {
+        all_message_status[site_id][predicate_tmp] += idx++;
+    }
+
+}
+
 void RemoteMessageService::init_message_status_counter(){
     message_status["received"] = 0;
     for(auto& predicate_tmp : config["suffix"]) {
         message_status[predicate_tmp] = 0;
     }
+
+    for(const auto& site_info : config["server_sites"]) {
+        all_message_status[site_info["id"]]["received"] = 0;
+        for(auto& predicate_tmp : config["suffix"]) {
+            all_message_status[site_info["id"]][predicate_tmp] = 0;
+        }
+    }
+    
+}
+
+void RemoteMessageService::global_state_table_sending_loop(uint64_t interval){
+    uint64_t cur_time = get_time_us();
+    while(true){
+        if((get_time_us() - cur_time) / 1000 > interval){
+            std::cout << "do something" << std::endl;
+            cur_time = get_time_us();
+            
+            for(const auto& it : site_id_to_connect_fd){
+                if(local_site_id == it.first){
+                    continue;
+                }
+                std::string res = prepare_GST_update_of_site(it.first);
+                bool success;
+                success = sock_write(it.second, Response{MESSAGE_TYPE_UPDATE_GST, 0, res.size(), 0, 0, local_site_id});
+                if(!success){
+                    throw std::runtime_error("failed to wrtie GST header");
+                }
+                // the json reply
+                success = sock_write(it.second, res.c_str(), res.size());
+                if(!success){
+                    throw std::runtime_error("failed to wrtie GST body");
+                }
+            }
+        }
+    }
+
 }
 
 void RemoteMessageService::send_ack_for_type(std::string key, site_id_t site_id){
@@ -221,9 +280,12 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                               << "receive " << n << " messages from sender.\n";
                     throw std::runtime_error("Failed to read request header");
                 }
-                if(!site_id_to_connect_fd.count(header.site_id)){
+                if(header.request_type == MESSAGE_TYPE_GREET){
                     site_id_to_connect_fd[header.site_id] = connected_sock_fd;
+                    std::cout << "receive greet from site " << header.site_id << " and map size is " << site_id_to_connect_fd.size() << std::endl;
+                    continue;
                 }
+                
                 // if(receive_cnt==1000 && all_start_time == 0){
                 //     // this is used to test the bandwidth, because the first 1000 messages have high delay at sometime
                 //     all_start_time = get_time_us();
@@ -246,7 +308,7 @@ void RemoteMessageService::epoll_worker(int connected_sock_fd) {
                 // the json reply
                 success = sock_write(connected_sock_fd, json_reply.c_str(), json_reply.size());
                 // std::cout << "ACK sent of request = " + std::to_string(header.seq) + " which is a " + (header.request_type ? "read":"write") << " request\n";
-                // std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
+                std::cout << "ACK sent of request = " + std::to_string(header.seq) + "\n";
                 // if(total_msg == receive_cnt){
                 //     receive_cnt -= 1000;
                 //     double total_time = (last_message_time-all_start_time)/1000000.0;
@@ -287,6 +349,10 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();
+    // if(local_site_id == 1002){
+        std::thread update_GST_thread(&RemoteMessageService::global_state_table_sending_loop, &remote_message_service, wan_group_config["GST_update_interval"]);
+        update_GST_thread.detach();
+    // }
 }
 
 void WanAgentServer::send_ack_for_type(std::string key, site_id_t site_id){
@@ -398,13 +464,13 @@ MessageSender::MessageSender(const site_id_t& local_site_id,
         // }
         }
         if(all_connect_flag){
+            is_all_connected = true;
             printf("All connected!\n");
             break;
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    // memset(arr_message_counter, 0, sizeof(arr_message_counter));
-    // print_arr_msg_counter();
+    send_greet_msg();
     nServer = message_counters.size();
     set_read_quorum(message_counters.size()/2+1);
     std::cout << "nServer = " << nServer << ",read_quorum " << read_quorum << std::endl;
@@ -475,6 +541,10 @@ void MessageSender::recv_ack_loop() {
                 if(res.request_type == MESSAGE_TYPE_UPDATE_FOR_TYPE){
                     // std::cout << "olaolaola" << json_reply.dump() << std::endl;
                     continue;
+                }else if(res.request_type == MESSAGE_TYPE_UPDATE_GST){
+                    std::cout << "ahaahaaha" << json_reply.dump() << " from site " << res.site_id << std::endl;
+                    
+                    continue;
                 }
                 
                 
@@ -521,6 +591,16 @@ void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t 
         // arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
         // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
         arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
+    }
+    // print_arr_msg_counter();
+}
+
+void MessageSender::update_gst_information(json json_reply, site_id_t site_id){
+    for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
+        // arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
+        // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
+        arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
+        global_state_table[site_id][ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
     }
     // print_arr_msg_counter();
 }
@@ -894,8 +974,21 @@ void MessageSender::read_enqueue(const uint64_t& version, ReadRecvCallback* RRC)
     delete tmp;
 }
 
+void MessageSender::send_greet_msg(){
+    std::cout << "!!!~~~!!!!\n";
+    for(auto& it : sockfd_to_server_site_id_map){
+        std::cout << "greet to " << it.second << std::endl;
+        bool success;
+        success = sock_write(it.first, RequestHeader{MESSAGE_TYPE_GREET, 0, 0, local_site_id, 0});
+        if(!success){
+            throw std::runtime_error("failed to wrtie greet msg");
+        }
+    }
+}
+
 void MessageSender::send_msg_loop() {
     log_enter_func();
+    // send_greet_msg();
     auto tid = pthread_self();
     // std::cout << "send_msg_loop start, tid = " << tid << std::endl;
     struct epoll_event events[EPOLL_MAXEVENTS];
@@ -931,7 +1024,7 @@ void MessageSender::send_msg_loop() {
                 sock_write(events[i].data.fd, RequestHeader{request_type, version, version, local_site_id, payload_size});
                 if (payload_size)
                     sock_write(events[i].data.fd, node.message_body, payload_size);
-                leave_queue_time_keeper[curr_seqno * 4 + site_id - 1001] = get_time_us();
+                // leave_queue_time_keeper[curr_seqno * 4 + site_id - 1001] = get_time_us();
                 // buffer_size[curr_seqno] = size;
                 last_sent_seqno[site_id] = curr_seqno;
             }
@@ -1129,6 +1222,13 @@ void WanAgentSender::print_predicate_map(){
 
 void WanAgentSender::set_read_quorum(int read_quorum){
     message_sender->set_read_quorum(read_quorum);
+}
+
+void WanAgentSender::send_greet_msg(){
+    while(!message_sender.get()->is_all_connected){
+        sleep(1);
+    }
+    message_sender.get()->send_greet_msg();
 }
 
 void WanAgentSender::init_postfix(const nlohmann::json& config){

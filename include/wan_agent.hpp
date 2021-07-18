@@ -50,6 +50,7 @@ namespace wan_agent
 #define MESSAGE_TYPE_WRITE 1
 #define MESSAGE_TYPE_UPDATE_FOR_TYPE 2
 #define MESSAGE_TYPE_UPDATE_GST 3
+#define MESSAGE_TYPE_GREET 4
 
 #define EPOLL_MAXEVENTS 64
 
@@ -199,6 +200,7 @@ namespace wan_agent
         const WanAgentAbstract *hugger;
 
         std::map<std::string, std::atomic<int>> message_status;
+        std::map<site_id_t, std::map<std::string, std::atomic<int>> > all_message_status;
 
         std::map<site_id_t, int> site_id_to_connect_fd;
 
@@ -209,6 +211,11 @@ namespace wan_agent
 
         std::string prepare_reply();
 
+        std::string prepare_GST_update_of_site(site_id_t site_id);
+
+        uint64_t GST_update_interval;
+
+        
         
     public:
         RemoteMessageService(const site_id_t local_site_id,
@@ -228,6 +235,10 @@ namespace wan_agent
         bool is_server_ready();
 
         void update_message_status(std::string key);
+
+        void update_message_status_from_site(site_id_t site_id, std::string key);
+
+        void global_state_table_sending_loop(uint64_t interval);
 
         void init_message_status_counter();
 
@@ -266,6 +277,8 @@ namespace wan_agent
          * shutdown the wan agent service and block until finished.
          */
         virtual void shutdown_and_wait() noexcept(false) override;
+
+        
     };
 
     struct LinkedBufferNode
@@ -394,6 +407,8 @@ namespace wan_agent
         // index for sf_time_keeper;
         int all_sf_tics = 0;
         int msg_idx = 0;
+
+        bool is_all_connected = false;
         // uint64_t *sf_time_keeper = static_cast<uint64_t *>(malloc(sizeof(uint64_t) * 80000));
         // index for sf_time_keeper;
         // int sf_timer_tics = 0;
@@ -409,6 +424,7 @@ namespace wan_agent
         // stability frontier for each predicate in the map
         std::map<std::string, uint64_t> new_predicate_arrive_map;
 
+        std::map<site_id_t, int*> global_state_table;
         // char * monitor_char*;
         uint64_t sf_arrive_time = 0;
 
@@ -446,6 +462,7 @@ namespace wan_agent
         void read_enqueue(const uint64_t &version, ReadRecvCallback* RRC);
         void send_msg_loop();
         void read_msg_loop();
+        void send_greet_msg();
         void predicate_calculation();
         // void predicate_calculation_multi();
         void predicate_calculation_postfix();
@@ -456,6 +473,7 @@ namespace wan_agent
         void sf_time_checker_loop();
         // void update_predicate_counter(json json_reply, site_id_t site_id);
         void update_predicate_counter_postfix(json json_reply, site_id_t site_id);
+        void update_gst_information(json json_reply, site_id_t site_id);
         void trigger_write_callback(const int pre_stability_frontier);
         // void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
         // void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
@@ -577,6 +595,8 @@ namespace wan_agent
         void monitor_stability_frontier(MonitorCallback, std::string predicate_key="default" );
 
         void test_predicate();
+
+        void send_greet_msg();
         
         void wait() {
             bool mark = 1;
@@ -626,7 +646,7 @@ namespace wan_agent
                  const PredicateLambda &pl, const RemoteMessageCallback &rmc, std::string log_level = "trace")
         {
             wanserver = new WanAgentServer(config, rmc);
-            // sleep(3);
+            sleep(3);
             wansender = new WanAgentSender(config, pl);
         }
         ~WanAgent(){
