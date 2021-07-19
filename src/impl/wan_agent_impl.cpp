@@ -614,7 +614,11 @@ void MessageSender::update_gst_content(json json_reply, site_id_t site_id){
             global_state_table[tmp_site_id][ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[gst_iter.key()]] = gst_iter.value();
         }
     }
-
+    // int sff_idx = new_predicate_map["default"](global_state_table[site_id]);
+    // int sff = global_state_table[site_id][sff_idx];
+    
+    stability_frontier_arrive_cv.notify_one();
+    monitor_stability_frontier_cv.notify_all();
     // print content of some global_state_table
     // for(int i = 0; i < 5; i++){
     //     for(int j = 0; j < 6; j++){
@@ -622,17 +626,18 @@ void MessageSender::update_gst_content(json json_reply, site_id_t site_id){
     //     }
     //     printf("\n");
     // }
+    // printf("predicate res  sffffff%d\n", sff);
 }
 
-void MessageSender::update_gst_information(json json_reply, site_id_t site_id){
-    for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
-        // arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
-        // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
-        arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
-        global_state_table[site_id][ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
-    }
-    // print_arr_msg_counter();
-}
+// void MessageSender::update_gst_information(json json_reply, site_id_t site_id){
+//     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
+//         // arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
+//         // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
+//         arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
+//         global_state_table[site_id][ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
+//     }
+//     // print_arr_msg_counter();
+// }
 
 void MessageSender::trigger_write_callback(const int pre_stability_frontier){
     if(stability_frontier != pre_stability_frontier){
@@ -919,13 +924,25 @@ int MessageSender::non_gccjit_calculation(int* seq_vec) {
 }
 
 void MessageSender::wait_stability_frontier_loop(site_id_t site_id, int sf, std::string predicate_key) {
-    while (true)
-    {
-        std::unique_lock<std::mutex> lock(stability_frontier_arrive_mutex);
-        stability_frontier_arrive_cv.wait(lock, [this, &sf, &predicate_key]() { return new_predicate_arrive_map[predicate_key] >= sf; });
-        break;
+    if(site_id == local_site_id){
+        while (true)
+        {
+            std::unique_lock<std::mutex> lock(stability_frontier_arrive_mutex);
+            stability_frontier_arrive_cv.wait(lock, [this, &sf, &predicate_key]() { return new_predicate_arrive_map[predicate_key] >= sf; });
+            break;
+        }
+    }else{
+        // printf("???????????????arriving\n");
+        while (true)
+        {
+            std::unique_lock<std::mutex> lock(stability_frontier_arrive_mutex);
+            stability_frontier_arrive_cv.wait(lock, [this, &sf, &predicate_key, &site_id]() { return global_state_table[site_id][new_predicate_map[predicate_key](global_state_table[site_id])] >= sf; });
+            break;
+        }
+        // printf("%d ！！！！！！！！！！！！！！arrived\n", sf);
     }
-    printf("%d arrived\n", sf);
+    
+    
     pthread_exit(NULL);
     //below two are together
     // sf_arrive_time = get_time_us();
@@ -940,8 +957,11 @@ void MessageSender::monitor_stability_frontier_loop(site_id_t site_id, std::stri
     monitor_threads_shutdown[monitor_thread_key] = false;
     std::mutex mutex_for_this_loop;
     // monitor_threads_mutexes[monitor_thread_key] = mutex_for_this_loop;
+    // global_state_table[site_id][new_predicate_map[predicate_key](global_state_table[site_id])]   looks complicated
+    // the inner `new_predicate_map[predicate_key](global_state_table[site_id])` is the result of the predicate of predicate_key for some site's table
+    // the outer `global_state_table[site_id]` is the array
     bool is_local = site_id == local_site_id ? true : false;
-    int old_value = is_local ? new_predicate_arrive_map[predicate_key] : new_predicate_map[predicate_key](global_state_table[site_id]);
+    int old_value = is_local ? new_predicate_arrive_map[predicate_key] : global_state_table[site_id][new_predicate_map[predicate_key](global_state_table[site_id])];
     while (!monitor_threads_shutdown[monitor_thread_key])
     {
         std::unique_lock<std::mutex> lock(monitor_stability_frontier_mutex);
@@ -949,14 +969,14 @@ void MessageSender::monitor_stability_frontier_loop(site_id_t site_id, std::stri
             if(is_local) 
                 return new_predicate_arrive_map[predicate_key] != old_value || monitor_threads_shutdown[monitor_thread_key]; 
             else
-                return new_predicate_map[predicate_key](global_state_table[site_id]) != old_value || monitor_threads_shutdown[monitor_thread_key]; 
+                return global_state_table[site_id][new_predicate_map[predicate_key](global_state_table[site_id])] != old_value || monitor_threads_shutdown[monitor_thread_key]; 
         });
 
         if(monitor_threads_shutdown[monitor_thread_key]){
             break;
         }
 
-        old_value = is_local ? new_predicate_arrive_map[predicate_key] : new_predicate_map[predicate_key](global_state_table[site_id]);
+        old_value = is_local ? new_predicate_arrive_map[predicate_key] : global_state_table[site_id][new_predicate_map[predicate_key](global_state_table[site_id])];
         char* sss;
         mc(old_value, sss);
     }
@@ -996,6 +1016,7 @@ void MessageSender::monitor_stability_frontier_loop(site_id_t site_id, std::stri
     //     }
     //     old_value = new_predicate_map[predicate_key](global_state_table[site_id]);
     // }
+    printf("END!!!!!!!!\n");
     pthread_exit(NULL);
 }
 
@@ -1393,6 +1414,7 @@ void WanAgentSender::wait_for(site_id_t site_id, int sequnce_number, std::string
         return;
     }
     wait_sf_threads.push_back(std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), site_id, sequnce_number, predicate_key));
+    wait_sf_threads.back().join();
     // wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sequnce_number, predicate_key);
 }
 
@@ -1402,7 +1424,7 @@ void WanAgentSender::monitor_stability_frontier(site_id_t site_id, MonitorCallba
 }
 
 void WanAgentSender::cancel_monitor_stability_frontier(std::string monitor_thread_key){
-    message_sender->monitor_threads_shutdown[monitor_thread_key] = false;
+    message_sender->monitor_threads_shutdown[monitor_thread_key] = true;
 }
 
 uint64_t WanAgentSender::get_stability_frontier_arrive_time() {

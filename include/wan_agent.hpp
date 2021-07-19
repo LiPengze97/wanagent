@@ -476,7 +476,7 @@ namespace wan_agent
         // void update_predicate_counter(json json_reply, site_id_t site_id);
         void update_predicate_counter_suffix(json json_reply, site_id_t site_id);
         void update_gst_content(json json_reply, site_id_t site_id);
-        void update_gst_information(json json_reply, site_id_t site_id);
+        // void update_gst_information(json json_reply, site_id_t site_id);
         void trigger_write_callback(const int pre_stability_frontier);
         // void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
         // void trigger_read_callback(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);

@@ -314,10 +314,10 @@ int main(int argc, char **argv)
         uint64_t now_time;
         
         // monitor callback example
-        // wan_agent::MonitorCallback MC = [&](const int latest_sf, const char* application_object){
-        //     printf("changed!%d\n", latest_sf);
-        // };
-        // wanagent.wansender->monitor_stability_frontier(MC);
+        wan_agent::MonitorCallback MC = [&](const int latest_sf, const char* application_object){
+            printf("changed!%d\n", latest_sf);
+        };
+        wanagent->wansender->monitor_stability_frontier(1002, MC, "test");
         //monitor_end;
         for (int i = 1; i <= number_of_messages; ++i){
             now_time = now_us();
@@ -327,13 +327,14 @@ int main(int argc, char **argv)
             }
             wanagent->wansender->send_write_req(send_content.c_str(), send_content.size(), &WRC);
             // wait test
-            // if(i == 65)
-            //     wanagent.wansender->wait_for(65);
+            // if(i == 5)
+            //     wanagent->wansender->wait_for(1002, 2);
             // if(i == 88)
             //     wanagent.wansender->wait_for(88);
             // wait test end
             latest_blob = Blob(send_content.c_str(), send_content.size());
         }
+        
         std::cout << "done!" << std::endl;
         // std::this_thread::sleep_for(std::chrono::seconds(5));
         // for (int i = 1; i <= 30; ++i)
@@ -431,6 +432,8 @@ int main(int argc, char **argv)
     }
     */
     std::cout << "Press ENTER to kill." << std::endl;
+    std::cin.get();
+    wanagent->wansender->cancel_monitor_stability_frontier("test");
     std::cin.get();
     wanagent->shutdown_and_wait();
     
