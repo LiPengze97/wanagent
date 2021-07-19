@@ -169,12 +169,26 @@ std::string RemoteMessageService::prepare_reply(){
     return j.dump();
 }
 
-std::string RemoteMessageService::prepare_GST_update_of_site(site_id_t site_id){
-    json j;
-    // for(auto iter = all_message_status[site_id].begin(); iter != all_message_status[site_id].end(); iter++){
-    //     j[iter->first] = iter->second.load();
-    // } 
-    j["foo"] = "bar";   
+std::string RemoteMessageService::prepare_GST_update(){
+    // TODO: if updated recently, then prepare GST, otherwise skip
+    json final_j;
+    for(auto outer_iter = all_message_status.begin(); outer_iter != all_message_status.end(); outer_iter++){
+        json tmp_j;
+        for(auto message_counter_iter = outer_iter->second.begin(); message_counter_iter != outer_iter->second.end(); message_counter_iter++){
+            tmp_j[message_counter_iter->first] = message_counter_iter->second.load();
+        }
+        final_j[outer_iter->first] = tmp_j;
+    }
+
+    json j, small_j;   
+    small_j["received"] = rand() % 10;
+    small_j["persisted"] = rand() % 10;
+    small_j["countersigned"] = rand() % 10; 
+    small_j["processed"] = rand() % 10;
+    small_j["encrypted"] = rand() % 10; 
+    small_j["deprecated"] = rand() % 10; 
+    j["1002"] = small_j;
+
     // std::cout << j.dump() << std::endl;
     return j.dump();
 }
@@ -203,6 +217,7 @@ void RemoteMessageService::update_message_status_from_site(site_id_t site_id, st
 }
 
 void RemoteMessageService::init_message_status_counter(){
+    // to be deprecated
     message_status["received"] = 0;
     for(auto& predicate_tmp : config["suffix"]) {
         message_status[predicate_tmp] = 0;
@@ -223,12 +238,11 @@ void RemoteMessageService::global_state_table_sending_loop(uint64_t interval){
         if((get_time_us() - cur_time) / 1000 > interval){
             std::cout << "do something" << std::endl;
             cur_time = get_time_us();
-            
+            std::string res = prepare_GST_update();
             for(const auto& it : site_id_to_connect_fd){
                 if(local_site_id == it.first){
                     continue;
                 }
-                std::string res = prepare_GST_update_of_site(it.first);
                 bool success;
                 success = sock_write(it.second, Response{MESSAGE_TYPE_UPDATE_GST, 0, res.size(), 0, 0, local_site_id});
                 if(!success){
@@ -349,10 +363,10 @@ WanAgentServer::WanAgentServer(const nlohmann::json& wan_group_config,
                   this) {
     std::thread rms_establish_thread(&RemoteMessageService::establish_connections, &remote_message_service);
     rms_establish_thread.detach();
-    // if(local_site_id == 1002){
+    if(local_site_id == 1002){
         std::thread update_GST_thread(&RemoteMessageService::global_state_table_sending_loop, &remote_message_service, wan_group_config["GST_update_interval"]);
         update_GST_thread.detach();
-    // }
+    }
 }
 
 void WanAgentServer::send_ack_for_type(std::string key, site_id_t site_id){
@@ -540,20 +554,18 @@ void MessageSender::recv_ack_loop() {
                 }
                 if(res.request_type == MESSAGE_TYPE_UPDATE_FOR_TYPE){
                     // std::cout << "olaolaola" << json_reply.dump() << std::endl;
+                    update_predicate_counter_suffix(json_reply, res.site_id);
                     continue;
                 }else if(res.request_type == MESSAGE_TYPE_UPDATE_GST){
                     std::cout << "ahaahaaha" << json_reply.dump() << " from site " << res.site_id << std::endl;
-                    
+                    update_gst_content(json_reply, res.site_id);
                     continue;
                 }
-                
-                
-                
                 // update_predicate_counter(json_reply, res.site_id);
 
-                update_predicate_counter_postfix(json_reply, res.site_id);
+                update_predicate_counter_suffix(json_reply, res.site_id);
                 // uint64_t sfst = get_time_us();
-                predicate_calculation_postfix();
+                predicate_calculation_suffix();
                 // sf_calculation_cost += (get_time_us() - sfst*1.0) / 1000.0;
                 // if (res.site_id == 1000)
                 //     std::cout << "received ACK from " + std::to_string(res.site_id) + " for msg " + std::to_string(res.version) + '\n';// +
@@ -586,13 +598,30 @@ void MessageSender::recv_ack_loop() {
 //     }
 // }
 
-void MessageSender::update_predicate_counter_postfix(json json_reply, site_id_t site_id){
+void MessageSender::update_predicate_counter_suffix(json json_reply, site_id_t site_id){
     for (json::iterator it = json_reply.begin(); it != json_reply.end(); ++it) {
         // arr_message_counter[ack_type_id[it.key()] * (nServer+1) + site_id_to_rank[site_id] ] = it.value();
         // int index = ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()];
         arr_message_counter[ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[it.key()]] = it.value();
     }
     // print_arr_msg_counter();
+}
+
+void MessageSender::update_gst_content(json json_reply, site_id_t site_id){
+    for (json::iterator site_iter = json_reply.begin(); site_iter != json_reply.end(); ++site_iter) {
+        site_id_t tmp_site_id = std::atoi(site_iter.key().c_str());
+        for(json::iterator gst_iter = json_reply[site_iter.key()].begin(); gst_iter != json_reply[site_iter.key()].end(); ++gst_iter){
+            global_state_table[tmp_site_id][ack_type_id.size() * (site_id_to_rank[site_id] - 1) + ack_type_id[gst_iter.key()]] = gst_iter.value();
+        }
+    }
+
+    // print content of some global_state_table
+    // for(int i = 0; i < 5; i++){
+    //     for(int j = 0; j < 6; j++){
+    //         printf("%d ", global_state_table[1002][i*6 + j]);
+    //     }
+    //     printf("\n");
+    // }
 }
 
 void MessageSender::update_gst_information(json json_reply, site_id_t site_id){
@@ -650,7 +679,7 @@ void MessageSender::recv_read_ack_loop() {
                     throw std::runtime_error("failed receiving json reply");
                 }
                 json json_reply = json::parse(std::string(buffer.get()));
-                update_predicate_counter_postfix(json_reply, res.site_id);
+                update_predicate_counter_suffix(json_reply, res.site_id);
 
                 auto obj_size = res.payload_size;
                 if (!obj_size) {
@@ -718,7 +747,7 @@ void MessageSender::recv_read_ack_loop() {
 // }
 
 
-void MessageSender::predicate_calculation_postfix() {
+void MessageSender::predicate_calculation_suffix() {
     int val = new_type_predicate(arr_message_counter);
     new_type_stability_frontier = arr_message_counter[val];
     for(auto& key_predicate : new_predicate_map){
@@ -889,7 +918,7 @@ int MessageSender::non_gccjit_calculation(int* seq_vec) {
     }
 }
 
-void MessageSender::wait_stability_frontier_loop(int sf, std::string predicate_key) {
+void MessageSender::wait_stability_frontier_loop(site_id_t site_id, int sf, std::string predicate_key) {
     while (true)
     {
         std::unique_lock<std::mutex> lock(stability_frontier_arrive_mutex);
@@ -903,26 +932,71 @@ void MessageSender::wait_stability_frontier_loop(int sf, std::string predicate_k
     // stability_frontier_set_cv.notify_one();
 }
 
-void MessageSender::monitor_stability_frontier_loop(std::string predicate_key, MonitorCallback mc) {
-    if (new_predicate_map.count(predicate_key) == 0)
-    {
+void MessageSender::monitor_stability_frontier_loop(site_id_t site_id, std::string predicate_key, std::string monitor_thread_key, MonitorCallback mc) {
+    if (new_predicate_map.count(predicate_key) == 0){
         std::cerr << "no such key!\n";
         return;
     }
+    monitor_threads_shutdown[monitor_thread_key] = false;
     std::mutex mutex_for_this_loop;
-    // monitor_stability_frontier_mutexes.push_back(mutex_for_this_loop);
-    int old_value = new_predicate_arrive_map[predicate_key];
-    while (true)
+    // monitor_threads_mutexes[monitor_thread_key] = mutex_for_this_loop;
+    bool is_local = site_id == local_site_id ? true : false;
+    int old_value = is_local ? new_predicate_arrive_map[predicate_key] : new_predicate_map[predicate_key](global_state_table[site_id]);
+    while (!monitor_threads_shutdown[monitor_thread_key])
     {
         std::unique_lock<std::mutex> lock(monitor_stability_frontier_mutex);
-        monitor_stability_frontier_cv.wait(lock, [this, &predicate_key, &old_value]() { 
-            return new_predicate_arrive_map[predicate_key] != old_value; 
+        monitor_stability_frontier_cv.wait(lock, [this, &predicate_key, &old_value, &monitor_thread_key, &site_id, is_local]() {
+            if(is_local) 
+                return new_predicate_arrive_map[predicate_key] != old_value || monitor_threads_shutdown[monitor_thread_key]; 
+            else
+                return new_predicate_map[predicate_key](global_state_table[site_id]) != old_value || monitor_threads_shutdown[monitor_thread_key]; 
         });
-        old_value = new_predicate_arrive_map[predicate_key];
+
+        if(monitor_threads_shutdown[monitor_thread_key]){
+            break;
+        }
+
+        old_value = is_local ? new_predicate_arrive_map[predicate_key] : new_predicate_map[predicate_key](global_state_table[site_id]);
         char* sss;
-        mc(new_predicate_arrive_map[predicate_key], sss);
+        mc(old_value, sss);
     }
-    
+
+    // complicated
+    // if(site_id == local_site_id){
+    //     // monitor_stability_frontier_mutexes.push_back(mutex_for_this_loop);
+    //     int old_value = new_predicate_arrive_map[predicate_key];
+    //     while (!monitor_threads_shutdown[monitor_thread_key])
+    //     {
+    //         std::unique_lock<std::mutex> lock(monitor_stability_frontier_mutex);
+    //         monitor_stability_frontier_cv.wait(lock, [this, &predicate_key, &old_value, &monitor_thread_key]() { 
+    //             return new_predicate_arrive_map[predicate_key] != old_value || monitor_threads_shutdown[monitor_thread_key]; 
+    //         });
+    //         if(monitor_threads_shutdown[monitor_thread_key]){
+    //             break;
+    //         }
+    //         old_value = new_predicate_arrive_map[predicate_key];
+    //         char* sss;
+    //         mc(new_predicate_arrive_map[predicate_key], sss);
+    //     }
+    // }else{
+    //     // 从 GST里面计算
+    //     int old_value = new_predicate_map[predicate_key](global_state_table[site_id]);
+    //     while (monitor_threads_shutdown[monitor_thread_key])
+    //     {
+    //         std::unique_lock<std::mutex> lock(monitor_stability_frontier_mutex);
+    //         monitor_stability_frontier_cv.wait(lock, [this, &predicate_key, &old_value, &monitor_thread_key]() { 
+    //             return new_predicate_arrive_map[predicate_key] != old_value || !monitor_threads_shutdown[monitor_thread_key]; 
+    //         });
+    //         if(!monitor_threads_shutdown[monitor_thread_key]){
+    //             break;
+    //         }
+    //         old_value = new_predicate_arrive_map[predicate_key];
+    //         char* sss;
+    //         mc(new_predicate_arrive_map[predicate_key], sss);
+    //     }
+    //     old_value = new_predicate_map[predicate_key](global_state_table[site_id]);
+    // }
+    pthread_exit(NULL);
 }
 
 
@@ -1149,7 +1223,7 @@ WanAgentSender::WanAgentSender(const nlohmann::json& wan_group_config,
     // [this]() { this->report_new_ack(); });
     // generate_predicate();
     // generate_predicate(wan_group_config);
-    init_postfix(wan_group_config);
+    init_suffix(wan_group_config);
     recv_ack_thread = std::thread(&MessageSender::recv_ack_loop, message_sender.get());
     send_msg_thread = std::thread(&MessageSender::send_msg_loop, message_sender.get());
     recv_read_ack_thread = std::thread(&MessageSender::recv_read_ack_loop, message_sender.get());
@@ -1231,15 +1305,23 @@ void WanAgentSender::send_greet_msg(){
     message_sender.get()->send_greet_msg();
 }
 
-void WanAgentSender::init_postfix(const nlohmann::json& config){
+void WanAgentSender::init_suffix(const nlohmann::json& config){
     int idx = 1;
     for(auto& pf : config["suffix"]){
         message_sender->ack_type_id[pf] = idx++;
     }
     // message_sender->arr_message_counter = new int[(config["server_sites"].size()+1)*(config["suffix"].size()+1)];
     message_sender->arr_message_counter = new int[config["server_sites"].size()*(config["suffix"].size()+1)];
-    memset(message_sender->arr_message_counter, 0, sizeof(message_sender->arr_message_counter));
+    memset(message_sender->arr_message_counter, 0, sizeof(int) * config["server_sites"].size()*(config["suffix"].size()+1));
     // std::cout << "coutner size is " << (config["server_sites"].size()+1)*config["suffix"].size() << std:: endl;
+    for(const auto& [site_id, ip_port] : server_sites_ip_addrs_and_ports) {
+        if(site_id != local_site_id) {
+            message_sender->global_state_table[site_id] = new int[config["server_sites"].size()*(config["suffix"].size()+1)];
+            memset(message_sender->global_state_table[site_id], 0, sizeof(int) * config["server_sites"].size()*(config["suffix"].size()+1));
+        }
+    }
+     
+    
 }
 
 void WanAgentSender::generate_predicate(const nlohmann::json& config) {
@@ -1298,24 +1380,29 @@ void WanAgentSender::generate_test_predicate() {
 }
 
 void WanAgentSender::set_stability_frontier(int sf) {
+    // deprecated
     message_sender->wait_target_sf = sf;
     std::cout << "msg senderwaiting for " << message_sender->wait_target_sf << std::endl;
-    wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sf, "default");
+    // wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sf, "default");
 }
 
-void WanAgentSender::wait_for(int sequnce_number, std::string predicate_key){
+void WanAgentSender::wait_for(site_id_t site_id, int sequnce_number, std::string predicate_key){
     if (new_predicate_map.count(predicate_key) == 0)
     {
         std::cerr << "no such key!\n";
         return;
     }
-    wait_sf_threads.push_back(std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sequnce_number, predicate_key));
+    wait_sf_threads.push_back(std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), site_id, sequnce_number, predicate_key));
     // wait_sf_thread = std::thread(&MessageSender::wait_stability_frontier_loop, message_sender.get(), sequnce_number, predicate_key);
 }
 
-void WanAgentSender::monitor_stability_frontier(MonitorCallback mc, std::string predicate_key) {
-    monitor_sf_threads.push_back(std::thread(&MessageSender::monitor_stability_frontier_loop, message_sender.get(), predicate_key, mc));
+void WanAgentSender::monitor_stability_frontier(site_id_t site_id, MonitorCallback mc, std::string monitor_thread_key, std::string predicate_key) {
+    monitor_sf_threads.push_back(std::thread(&MessageSender::monitor_stability_frontier_loop, message_sender.get(), site_id, predicate_key, monitor_thread_key, mc));
     monitor_sf_threads[monitor_sf_threads.size()-1].detach();
+}
+
+void WanAgentSender::cancel_monitor_stability_frontier(std::string monitor_thread_key){
+    message_sender->monitor_threads_shutdown[monitor_thread_key] = false;
 }
 
 uint64_t WanAgentSender::get_stability_frontier_arrive_time() {

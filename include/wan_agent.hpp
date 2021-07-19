@@ -211,7 +211,7 @@ namespace wan_agent
 
         std::string prepare_reply();
 
-        std::string prepare_GST_update_of_site(site_id_t site_id);
+        std::string prepare_GST_update();
 
         uint64_t GST_update_interval;
 
@@ -414,6 +414,8 @@ namespace wan_agent
         // int sf_timer_tics = 0;
         std::map<uint64_t, uint64_t> sf_arrive_time_map;
         std::map<uint64_t, uint64_t> remote_all_send_map;
+        std::map<std::string, bool> monitor_threads_shutdown;
+        std::map<std::string, std::mutex> monitor_threads_mutexes;
         predicate_fn_type predicate;
         predicate_fn_type inverse_predicate;
         predicate_fn_type complicate_predicate;
@@ -465,14 +467,15 @@ namespace wan_agent
         void send_greet_msg();
         void predicate_calculation();
         // void predicate_calculation_multi();
-        void predicate_calculation_postfix();
+        void predicate_calculation_suffix();
         void set_read_quorum(int read_quorum);
         // void read_predicate_calculation();
-        void wait_stability_frontier_loop(int sf, std::string predicate_key);
-        void monitor_stability_frontier_loop(std::string predicate_key, MonitorCallback mc);
+        void wait_stability_frontier_loop(site_id_t site_id, int sf, std::string predicate_key);
+        void monitor_stability_frontier_loop(site_id_t site_id, std::string predicate_key, std::string monitor_thread_key, MonitorCallback mc);
         void sf_time_checker_loop();
         // void update_predicate_counter(json json_reply, site_id_t site_id);
-        void update_predicate_counter_postfix(json json_reply, site_id_t site_id);
+        void update_predicate_counter_suffix(json json_reply, site_id_t site_id);
+        void update_gst_content(json json_reply, site_id_t site_id);
         void update_gst_information(json json_reply, site_id_t site_id);
         void trigger_write_callback(const int pre_stability_frontier);
         // void wait_read_predicate(const uint64_t seq, const uint64_t version, const site_id_t site, Blob &&obj);
@@ -507,6 +510,7 @@ namespace wan_agent
         std::thread wait_sf_thread;
         std::vector<std::thread> wait_sf_threads;
         std::vector<std::thread> monitor_sf_threads;
+        
         std::thread recv_read_ack_thread;
         std::thread read_msg_thread;
         uint64_t all_start_time;
@@ -524,8 +528,8 @@ namespace wan_agent
         std::map<std::string, predicate_fn_type> predicate_map;
         std::map<std::string, new_predicate_fn_type> new_predicate_map;
 
-        // read the user defined postfix and insert them in the sender's postfix rank map
-        void init_postfix(const nlohmann::json& config);
+        // read the user defined suffix and insert them in the sender's suffix rank map
+        void init_suffix(const nlohmann::json& config);
 
     public:
         WanAgentSender(const nlohmann::json &wan_group_config,
@@ -567,7 +571,7 @@ namespace wan_agent
 
         void submit_predicate(std::string key, std::string predicate_str, bool inplace);
 
-        // postfix type postfix
+        // suffix type suffix
         void submit_new_predicate(std::string key, std::string predicate_str, bool inplace);
 
         // generate predicates for each ACK type
@@ -590,9 +594,11 @@ namespace wan_agent
 
         void set_stability_frontier(int sf);
 
-        void wait_for(int sequnce_number, std::string predicate_key="default");
+        void wait_for(site_id_t site_id, int sequnce_number, std::string predicate_key="default");
 
-        void monitor_stability_frontier(MonitorCallback, std::string predicate_key="default" );
+        void monitor_stability_frontier(site_id_t site_id, MonitorCallback, std::string monitor_thread_key, std::string predicate_key="default" );
+
+        void cancel_monitor_stability_frontier(std::string monitor_thread_key);
 
         void test_predicate();
 
