@@ -462,15 +462,49 @@ namespace wan_agent
         void recv_read_ack_loop();
         uint64_t enqueue(const uint32_t request_type, const char *payload, const size_t payload_size, const uint64_t version, WriteRecvCallback* WRC);
         void read_enqueue(const uint64_t &version, ReadRecvCallback* RRC);
+        /**
+         * @description: the loop of sending messages to all wan nodes
+         */        
         void send_msg_loop();
+        /**
+         * @description: the loop of processing the acks from all wan nodes.
+         */ 
         void read_msg_loop();
+        /**
+         * @description: the loop of processing the acks from all wan nodes.
+         */
         void send_greet_msg();
+        /**
+         * @description: deprecated function to calculate the predicate.
+         */
         void predicate_calculation();
-        // void predicate_calculation_multi();
+
+        /**
+         * @description: function to calculate the updated predicate that supports suffix
+         */
         void predicate_calculation_suffix();
+        /**
+         * @description: set the read quorum.
+         * @param {int} read_quorum the read quorum
+         */        
         void set_read_quorum(int read_quorum);
         // void read_predicate_calculation();
+        /**
+         * @description: the loop of blocking until the target stability forntier is fullfilled with the predicate.
+         * @param {site_id_t} site_id, if site_id is non-local, use the global state table.
+         * @param {int} sf, the target stability frontier.
+         * @param {string} predicate_key, the predicate that user wants to use, the default value is "default".
+         * @return {*}
+         */        
         void wait_stability_frontier_loop(site_id_t site_id, int sf, std::string predicate_key);
+        /**
+         * @description: the loop of non-blocking watching if the stability forntier with the predicate updated, then call the monitor callback.
+         * @param {site_id_t} site_id, if site_id is non-local, use the global state table.
+         * @param {string} predicate_key, the predicate that user wants to use, the default value is "default".
+         * @param {string} monitor_thread_key, give this thread a name so that user can cancel it.
+         * @param {MonitorCallback} mc
+         * @return {*}
+         */        
         void monitor_stability_frontier_loop(site_id_t site_id, std::string predicate_key, std::string monitor_thread_key, MonitorCallback mc);
         void sf_time_checker_loop();
         // void update_predicate_counter(json json_reply, site_id_t site_id);
